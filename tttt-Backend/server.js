@@ -69,10 +69,7 @@ const Course = mongoose.model(
 )
 
 // মিডলওয়্যার
-app.use(cors({
-  origin: 'https://clever-froyo-c0908e.netlify.app',
-  credentials: true
-}));
+app.use(cors())
 app.use(express.json())
 
 // ====== নতুন পেমেন্ট ভ্যালিডেশন মিডলওয়্যার ======
