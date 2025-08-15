@@ -2491,37 +2491,43 @@ async function resetPassword(email, newPassword) {
 }
         // লগইন স্ট্যাটাস চেক করুন
         function checkLoginStatus() {
-            const token = localStorage.getItem('authToken');
-            const user = JSON.parse(localStorage.getItem('currentUser'));
-            
-            const desktopLoginButton = document.getElementById('desktopLoginButton');
-            const mobileLoginButton = document.getElementById('mobileLoginButton');
-            const desktopProfileDropdown = document.getElementById('desktopProfileDropdown');
-            const mobileProfileDropdown = document.getElementById('mobileProfileDropdown');
-            const desktopProfileIcon = document.getElementById('desktopProfileIcon');
-            const mobileProfileIcon = document.getElementById('mobileProfileIcon');
-            
-            if (token && user) {
-                if (desktopLoginButton) desktopLoginButton.style.display = 'none';
-                if (mobileLoginButton) mobileLoginButton.style.display = 'none';
-                
-                if (desktopProfileDropdown) {
-                    desktopProfileDropdown.style.display = 'block';
-                    desktopProfileIcon.textContent = user.name.charAt(0).toUpperCase();
-                }
-                if (mobileProfileDropdown) {
-                    mobileProfileDropdown.style.display = 'block';
-                    mobileProfileIcon.textContent = user.name.charAt(0).toUpperCase();
-                }
-            } else {
-                if (desktopLoginButton) desktopLoginButton.style.display = 'flex';
-                if (mobileLoginButton) mobileLoginButton.style.display = 'flex';
-                
-                if (desktopProfileDropdown) desktopProfileDropdown.style.display = 'none';
-                if (mobileProfileDropdown) mobileProfileDropdown.style.display = 'none';
-            }
+    const token = localStorage.getItem('authToken');
+    const user = JSON.parse(localStorage.getItem('currentUser') || "null");
+
+    // DOM Elements
+    const elements = {
+        desktopLoginButton: document.getElementById('desktopLoginButton'),
+        mobileLoginButton: document.getElementById('mobileLoginButton'),
+        desktopProfileDropdown: document.getElementById('desktopProfileDropdown'),
+        mobileProfileDropdown: document.getElementById('mobileProfileDropdown'),
+        desktopProfileIcon: document.getElementById('desktopProfileIcon'),
+        mobileProfileIcon: document.getElementById('mobileProfileIcon')
+    };
+
+    const isLoggedIn = !!token && !!user;
+
+    // Login buttons visibility
+    if (elements.desktopLoginButton) elements.desktopLoginButton.style.display = isLoggedIn ? 'none' : 'flex';
+    if (elements.mobileLoginButton) elements.mobileLoginButton.style.display = isLoggedIn ? 'none' : 'flex';
+
+    // Profile dropdown visibility
+    if (elements.desktopProfileDropdown) {
+        elements.desktopProfileDropdown.style.display = isLoggedIn ? 'block' : 'none';
+        if (isLoggedIn && elements.desktopProfileIcon) {
+            elements.desktopProfileIcon.textContent = user.name.charAt(0).toUpperCase();
         }
-        
+    }
+
+    if (elements.mobileProfileDropdown) {
+        elements.mobileProfileDropdown.style.display = isLoggedIn ? 'block' : 'none';
+        if (isLoggedIn && elements.mobileProfileIcon) {
+            elements.mobileProfileIcon.textContent = user.name.charAt(0).toUpperCase();
+        }
+    }
+
+    return isLoggedIn; // Optional: ফাংশন কল করলে লগইন স্ট্যাটাসও জানাবে
+}
+
         // লগইন বাটন ক্লিক হ্যান্ডলার
         const handleLogin = () => {
             document.querySelector('.login-popup').classList.add('active');
@@ -5657,37 +5663,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
 // লগইন স্ট্যাটাস চেক করার ফাংশন (আপডেটেড)
-function checkLoginStatus() {
-    const token = localStorage.getItem('authToken');
-    const user = JSON.parse(localStorage.getItem('currentUser'));
-    
-    const desktopLoginButton = document.getElementById('desktopLoginButton');
-    const mobileLoginButton = document.getElementById('mobileLoginButton');
-    const desktopProfileDropdown = document.getElementById('desktopProfileDropdown');
-    const mobileProfileDropdown = document.getElementById('mobileProfileDropdown');
-    const desktopProfileIcon = document.getElementById('desktopProfileIcon');
-    const mobileProfileIcon = document.getElementById('mobileProfileIcon');
-    
-    if (token && user) {
-        if (desktopLoginButton) desktopLoginButton.style.display = 'none';
-        if (mobileLoginButton) mobileLoginButton.style.display = 'none';
-        
-        if (desktopProfileDropdown) {
-            desktopProfileDropdown.style.display = 'block';
-            desktopProfileIcon.textContent = user.name.charAt(0).toUpperCase();
-        }
-        if (mobileProfileDropdown) {
-            mobileProfileDropdown.style.display = 'block';
-            mobileProfileIcon.textContent = user.name.charAt(0).toUpperCase();
-        }
-    } else {
-        if (desktopLoginButton) desktopLoginButton.style.display = 'flex';
-        if (mobileLoginButton) mobileLoginButton.style.display = 'flex';
-        
-        if (desktopProfileDropdown) desktopProfileDropdown.style.display = 'none';
-        if (mobileProfileDropdown) mobileProfileDropdown.style.display = 'none';
-    }
-}
+
 // "এখনই কিনুন" বাটনের ফাংশন (আপডেটেড)
 function handleBuyNow() {
     // প্রথমে চেক করুন ইউজার লগইন করা আছে কিনা
