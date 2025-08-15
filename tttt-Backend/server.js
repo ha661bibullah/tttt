@@ -17,76 +17,153 @@ const io = new Server(server, {
   },
 })
 
-// MongoDB Connection
-mongoose
-  .connect(process.env.MONGO_URI)
+// MongoDB connection
+mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB Connected"))
   .catch((err) => console.error("MongoDB Connection Error:", err))
 
-// User Model with OTP fields
-const User = mongoose.model(
-  "User",
+// User model with enhanced validation
+const UserSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  email: { 
+    type: String, 
+    required: true, 
+    unique: true,
+    validate: {
+      validator: function(v) {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
+      },
+      message: props => `${props.value} is not a valid email address!`
+    }
+  },
+  password: { type: String, required: true, minlength: 6 },
+  courses: [String],
+  otp: String,
+  otpExpires: Date,
+  resetToken: String,
+  resetTokenExpires: Date,
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+})
+
+// Add pre-save hook for password hashing
+UserSchema.pre('save', async function(next) {
+  if (this.isModified('password')) {
+    this.password = await bcrypt.hash(this.password, 10)
+  }
+  this.updatedAt = Date.now()
+  next()
+})
+
+const User = mongoose.model("User", UserSchema)
+
+// Payment model
+const Payment = mongoose.model(
+  "Payment",
   new mongoose.Schema({
+    userId: String,
     name: String,
-    email: { type: String, unique: true },
-    password: String,
-    courses: [String],
-    otp: String,
-    otpExpires: Date,
-    resetToken: String,
-    resetTokenExpires: Date,
-    createdAt: { type: Date, default: Date.now },
+    email: String,
+    phone: String,
+    courseId: String,
+    courseName: String,
+    paymentMethod: String,
+    txnId: String,
+    amount: Number,
+    status: { type: String, default: "pending" },
+    date: { type: Date, default: Date.now },
   })
 )
 
-// Other models (Payment, Course) remain the same...
+// Course model
+const Course = mongoose.model(
+  "Course",
+  new mongoose.Schema({
+    id: String,
+    title: String,
+    description: String,
+    price: Number,
+    duration: String,
+    instructor: String,
+    createdAt: { type: Date, default: Date.now },
+  })
+)
 
 // Middleware
 app.use(cors())
 app.use(express.json())
 
-// ====================
-// Authentication Routes
-// ====================
-const saltRounds = 10
+// JWT verification middleware
+const authenticateJWT = (req, res, next) => {
+  const authHeader = req.headers.authorization
+  
+  if (authHeader) {
+    const token = authHeader.split(' ')[1]
+    
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+      if (err) {
+        return res.sendStatus(403)
+      }
+      
+      req.user = user
+      next()
+    })
+  } else {
+    res.sendStatus(401)
+  }
+}
 
-// Send OTP
+// OTP routes
 app.post("/api/send-otp", async (req, res) => {
   try {
     const { email } = req.body
-    const otp = Math.floor(1000 + Math.random() * 9000).toString()
-
-    // Save OTP to user in database
-    await User.findOneAndUpdate(
-      { email },
-      { 
-        otp,
-        otpExpires: Date.now() + 300000 // 5 minutes
-      },
-      { upsert: true, new: true }
-    )
-
-    // In production, send OTP via email
-    if (process.env.NODE_ENV === "production") {
-      const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS,
-        },
-      })
-
-      const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to: email,
-        subject: "Your OTP Code",
-        text: `Your OTP code is: ${otp}`,
-      }
-
-      await transporter.sendMail(mailOptions)
+    
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ success: false, message: "Invalid email address" })
     }
 
-    console.log(`OTP for ${email}: ${otp}`) // For development only
+    const otp = Math.floor(1000 + Math.random() * 9000).toString()
+    const otpExpires = Date.now() + 300000 // 5 minutes
+
+    // Check if user exists
+    let user = await User.findOne({ email })
+    
+    if (user) {
+      // Update existing user's OTP
+      user.otp = otp
+      user.otpExpires = otpExpires
+      await user.save()
+    } else {
+      // Create new user with OTP (temporary until full registration)
+      user = new User({ email, otp, otpExpires })
+      await user.save()
+    }
+
+    // Send OTP via email
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    })
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "তালিমুল ইসলাম একাডেমি - OTP কোড",
+      text: `আপনার OTP কোড: ${otp}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #2E7D32;">OTP Verification</h2>
+          <p>আপনার OTP কোড: <strong>${otp}</strong></p>
+          <p style="color: #666;">এই কোড ৫ মিনিটের জন্য বৈধ</p>
+        </div>
+      `
+    }
+
+    await transporter.sendMail(mailOptions)
+
     res.json({ success: true, message: "OTP sent successfully" })
   } catch (error) {
     console.error("Error sending OTP:", error)
@@ -94,19 +171,22 @@ app.post("/api/send-otp", async (req, res) => {
   }
 })
 
-// Verify OTP
 app.post("/api/verify-otp", async (req, res) => {
   try {
     const { email, otp } = req.body
 
     const user = await User.findOne({ email })
+    
+    if (!user) {
+      return res.status(400).json({ success: false, message: "User not found" })
+    }
 
-    if (!user || user.otp !== otp) {
+    if (user.otp !== otp) {
       return res.status(400).json({ success: false, message: "Invalid OTP" })
     }
 
     if (user.otpExpires < Date.now()) {
-      return res.status(400).json({ success: false, message: "OTP expired" })
+      return res.status(400).json({ success: false, message: "OTP has expired" })
     }
 
     // Clear OTP after successful verification
@@ -121,207 +201,255 @@ app.post("/api/verify-otp", async (req, res) => {
   }
 })
 
-// Register User
+// Registration route
 app.post("/api/register", async (req, res) => {
   try {
-    const { name, email, password, otp } = req.body
+    const { name, email, password } = req.body
 
-    // Validate OTP first
-    const user = await User.findOne({ email })
-    if (!user || user.otp !== otp) {
-      return res.status(400).json({ success: false, message: "Invalid OTP" })
-    }
-
-    if (user.otpExpires < Date.now()) {
-      return res.status(400).json({ success: false, message: "OTP expired" })
+    // Validate input
+    if (!name || !email || !password) {
+      return res.status(400).json({ 
+        success: false,
+        message: "All fields are required"
+      })
     }
 
     // Check if user already exists
     const existingUser = await User.findOne({ email })
     if (existingUser && existingUser.password) {
-      return res.status(400).json({ success: false, message: "User already exists" })
+      return res.status(400).json({ 
+        success: false,
+        message: "Email already registered"
+      })
     }
 
     // Hash password
-    const hashedPassword = await bcrypt.hash(password, saltRounds)
+    const hashedPassword = await bcrypt.hash(password, 10)
 
     // Create or update user
-    const updatedUser = await User.findOneAndUpdate(
-      { email },
-      {
+    let user
+    if (existingUser) {
+      // Update existing user (who only had email/OTP before)
+      user = existingUser
+      user.name = name
+      user.password = hashedPassword
+    } else {
+      // Create new user
+      user = new User({
         name,
+        email,
         password: hashedPassword,
-        otp: undefined,
-        otpExpires: undefined
-      },
-      { new: true }
-    )
-
-    // Generate JWT token
-    const token = jwt.sign({ userId: updatedUser._id }, process.env.JWT_SECRET, {
-      expiresIn: "7d"
-    })
-
-    res.json({
-      success: true,
-      token,
-      user: {
-        id: updatedUser._id,
-        name: updatedUser.name,
-        email: updatedUser.email
-      }
-    })
-  } catch (error) {
-    console.error("Registration error:", error)
-    res.status(500).json({ success: false, message: "Registration failed" })
-  }
-})
-
-// Login User
-app.post("/api/login", async (req, res) => {
-  try {
-    const { email, password } = req.body
-
-    const user = await User.findOne({ email })
-    if (!user) {
-      return res.status(401).json({ success: false, message: "Invalid credentials" })
+        courses: []
+      })
     }
 
-    // Compare passwords
-    const isMatch = await bcrypt.compare(password, user.password)
-    if (!isMatch) {
-      return res.status(401).json({ success: false, message: "Invalid credentials" })
-    }
+    await user.save()
 
     // Generate JWT token
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "7d"
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { 
+      expiresIn: "1d" 
     })
 
-    res.json({
+    res.status(201).json({
       success: true,
       token,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
-        courses: user.courses || []
-      }
+        courses: user.courses,
+      },
+      message: "Registration successful"
+    })
+
+  } catch (error) {
+    console.error("Registration error:", error)
+    
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "Email already registered"
+      })
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: "Registration failed",
+      error: error.message
+    })
+  }
+})
+
+// Login route
+app.post("/api/login", async (req, res) => {
+  try {
+    const { email, password } = req.body
+
+    // Validate input
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password are required" })
+    }
+
+    const user = await User.findOne({ email })
+    if (!user) {
+      return res.status(401).json({ message: "Invalid credentials" })
+    }
+
+    // Compare passwords
+    const isMatch = await bcrypt.compare(password, user.password)
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid credentials" })
+    }
+
+    // Generate JWT token
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { 
+      expiresIn: "1d" 
+    })
+
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        courses: user.courses,
+      },
+      message: "Login successful"
     })
   } catch (error) {
     console.error("Login error:", error)
-    res.status(500).json({ success: false, message: "Login failed" })
+    res.status(500).json({ message: "Login failed" })
   }
 })
 
-// Forgot Password - Send OTP
+// Password reset routes
 app.post("/api/forgot-password", async (req, res) => {
   try {
     const { email } = req.body
-
+    
     const user = await User.findOne({ email })
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" })
+      return res.status(404).json({ message: 'User not found' })
     }
-
-    const otp = Math.floor(1000 + Math.random() * 9000).toString()
-
-    // Save OTP to user
-    user.otp = otp
-    user.otpExpires = Date.now() + 300000 // 5 minutes
+    
+    // Generate reset token
+    const resetToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '15m' })
+    const resetTokenExpires = Date.now() + 900000 // 15 minutes
+    
+    user.resetToken = resetToken
+    user.resetTokenExpires = resetTokenExpires
     await user.save()
+    
+    // Send reset email
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    })
 
-    // In production, send OTP via email
-    if (process.env.NODE_ENV === "production") {
-      const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS,
-        },
-      })
-
-      const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to: email,
-        subject: "Password Reset OTP",
-        text: `Your password reset OTP is: ${otp}`,
-      }
-
-      await transporter.sendMail(mailOptions)
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`
+    
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "Password Reset Request",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #2E7D32;">Password Reset</h2>
+          <p>Please click the link below to reset your password:</p>
+          <a href="${resetUrl}" style="display: inline-block; background: #2E7D32; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin: 10px 0;">Reset Password</a>
+          <p style="color: #666;">This link will expire in 15 minutes.</p>
+        </div>
+      `
     }
 
-    console.log(`Password reset OTP for ${email}: ${otp}`) // For development only
-    res.json({ success: true, message: "OTP sent successfully" })
+    await transporter.sendMail(mailOptions)
+    
+    res.json({ success: true, message: 'Password reset email sent' })
   } catch (error) {
-    console.error("Forgot password error:", error)
-    res.status(500).json({ success: false, message: "Failed to process request" })
+    console.error('Forgot password error:', error)
+    res.status(500).json({ message: 'Failed to process request' })
   }
 })
 
-// Reset Password
 app.post("/api/reset-password", async (req, res) => {
   try {
-    const { email, otp, newPassword } = req.body
-
-    const user = await User.findOne({ email })
-    if (!user || user.otp !== otp) {
-      return res.status(400).json({ success: false, message: "Invalid OTP" })
+    const { token, newPassword } = req.body
+    
+    if (!token || !newPassword) {
+      return res.status(400).json({ message: 'Token and new password are required' })
     }
-
-    if (user.otpExpires < Date.now()) {
-      return res.status(400).json({ success: false, message: "OTP expired" })
+    
+    // Verify token
+    let decoded
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET)
+    } catch (err) {
+      return res.status(400).json({ message: 'Invalid or expired token' })
     }
-
-    // Hash new password
-    const hashedPassword = await bcrypt.hash(newPassword, saltRounds)
-
-    // Update password and clear OTP
-    user.password = hashedPassword
-    user.otp = undefined
-    user.otpExpires = undefined
+    
+    const user = await User.findOne({ 
+      email: decoded.email,
+      resetToken: token,
+      resetTokenExpires: { $gt: Date.now() }
+    })
+    
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid or expired token' })
+    }
+    
+    // Update password
+    user.password = await bcrypt.hash(newPassword, 10)
+    user.resetToken = undefined
+    user.resetTokenExpires = undefined
     await user.save()
-
-    res.json({ success: true, message: "Password reset successfully" })
+    
+    res.json({ success: true, message: 'Password reset successfully' })
   } catch (error) {
-    console.error("Reset password error:", error)
-    res.status(500).json({ success: false, message: "Failed to reset password" })
+    console.error('Password reset error:', error)
+    res.status(500).json({ message: 'Password reset failed' })
   }
 })
 
-// Protected route example
-app.get("/api/profile", authenticateToken, async (req, res) => {
+// Protected user routes
+app.get("/api/user", authenticateJWT, async (req, res) => {
   try {
-    const user = await User.findById(req.user.userId).select("-password")
+    const user = await User.findById(req.user.userId)
     if (!user) {
       return res.status(404).json({ message: "User not found" })
     }
-    res.json(user)
+    
+    res.json({
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      courses: user.courses
+    })
   } catch (error) {
-    console.error("Profile error:", error)
-    res.status(500).json({ message: "Failed to fetch profile" })
+    console.error("Error fetching user:", error)
+    res.status(500).json({ message: "Error fetching user data" })
   }
 })
 
-// JWT Authentication Middleware
-function authenticateToken(req, res, next) {
-  const authHeader = req.headers["authorization"]
-  const token = authHeader && authHeader.split(" ")[1]
-
-  if (!token) {
-    return res.status(401).json({ message: "Unauthorized" })
-  }
-
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ message: "Forbidden" })
+// User courses route
+app.get("/api/user/courses", authenticateJWT, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId).populate('courses')
+    if (!user) {
+      return res.status(404).json({ message: "User not found" })
     }
-    req.user = user
-    next()
-  })
-}
+    
+    res.json({ courses: user.courses || [] })
+  } catch (error) {
+    console.error("Error fetching user courses:", error)
+    res.status(500).json({ message: "Error fetching user courses" })
+  }
+})
 
-// Keep all other existing routes (payments, courses, etc.) unchanged...
+// Other existing routes (payments, courses, etc.) remain the same
+// ... [keep all the existing payment and course routes from your original code]
 
 // Start server
 const PORT = process.env.PORT || 5000

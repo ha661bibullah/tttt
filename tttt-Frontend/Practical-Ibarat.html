@@ -2063,7 +2063,7 @@
     // ====================
     // Login Module
     // ====================
- 
+  
     // হেডার ব্লার ইফেক্ট
     function setHeaderBlur(active) {
         const header = document.querySelector('.header');
@@ -2248,58 +2248,402 @@ window.togglePasswordVisibility = function(inputId, toggleId) {
 </script>
 <script>
 // ====================
-// Login Module
+// Login Module (Updated)
 // ====================
 const LoginModule = (() => {
     // Global variables
     let otpTimer;
+    let tokenRefreshInterval;
     let currentUserEmail = '';
     let generatedOTP = '';
     let resetPasswordEmail = '';
+    let resetPasswordToken = '';
+    
+    // Fetch with timeout utility
+    const fetchWithTimeout = async (url, options, timeout = 10000) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+        try {
+            const response = await fetch(url, {
+                ...options,
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            return response;
+        } catch (error) {
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                throw new Error('Request timeout');
+            }
+            throw error;
+        }
+    };
+
+    // Form toggle function
+    window.toggleForm = function(formType) {
+        document.getElementById('loginSection').style.display = 'none';
+        document.getElementById('emailCheckSection').style.display = 'none';
+        document.getElementById('otpVerificationSection').style.display = 'none';
+        document.getElementById('signupSection').style.display = 'none';
+        document.getElementById('forgotPasswordSection').style.display = 'none';
+        document.getElementById('resetPasswordSection').style.display = 'none';
+        
+        if (formType === 'login') {
+            document.getElementById('loginSection').style.display = 'block';
+            document.getElementById('loginEmail').focus();
+        } else if (formType === 'emailCheck') {
+            document.getElementById('emailCheckSection').style.display = 'block';
+            document.getElementById('checkEmail').focus();
+        } else if (formType === 'otpVerification') {
+            document.getElementById('otpVerificationSection').style.display = 'block';
+            document.getElementById('otp1').focus();
+        } else if (formType === 'signup') {
+            document.getElementById('signupSection').style.display = 'block';
+            document.getElementById('signupName').focus();
+        } else if (formType === 'forgotPassword') {
+            document.getElementById('forgotPasswordSection').style.display = 'block';
+            document.getElementById('forgotEmail').focus();
+        } else if (formType === 'resetPassword') {
+            document.getElementById('resetPasswordSection').style.display = 'block';
+            document.getElementById('resetNewPassword').focus();
+        }
+    };
+    
+    // Password visibility toggle
+    window.togglePasswordVisibility = function(inputId, toggleId) {
+        const passwordInput = document.getElementById(inputId);
+        const toggleButton = document.getElementById(toggleId);
+        
+        if (passwordInput.type === 'password') {
+            passwordInput.type = 'text';
+            toggleButton.textContent = 'Hide';
+        } else {
+            passwordInput.type = 'password';
+            toggleButton.textContent = 'Show';
+        }
+    };
+    
+    // OTP timer
+    function startOTPTimer() {
+        let totalSeconds = 120;
+        
+        clearInterval(otpTimer);
+        document.getElementById('resendOtp').disabled = true;
+        
+        const updateTimer = () => {
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            document.getElementById('timer').textContent = 
+                `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            
+            if (totalSeconds <= 0) {
+                clearInterval(otpTimer);
+                document.getElementById('resendOtp').disabled = false;
+            }
+            totalSeconds--;
+        };
+        
+        updateTimer();
+        otpTimer = setInterval(updateTimer, 1000);
+    }
+    
+    // Loading indicators
+    function showLoading() {
+        document.body.classList.add('loading');
+    }
+    
+    function hideLoading() {
+        document.body.classList.remove('loading');
+    }
+    
+    // Error handling
+    function showError(elementId, message) {
+        const errorElement = document.getElementById(elementId);
+        errorElement.textContent = message;
+        errorElement.classList.add('show-error');
+    }
+    
+    function hideError(elementId) {
+        document.getElementById(elementId).classList.remove('show-error');
+    }
+    
+    // Email validation
+    function validateEmail(email) {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    }
+    
+    // Notifications
+    function showNotification(message, type = 'success') {
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.textContent = message;
+        
+        notification.style.position = 'fixed';
+        notification.style.top = '20px';
+        notification.style.right = '20px';
+        notification.style.padding = '10px 20px';
+        notification.style.backgroundColor = type === 'success' ? '#4CAF50' : '#f44336';
+        notification.style.color = 'white';
+        notification.style.borderRadius = '5px';
+        notification.style.zIndex = '9999';
+        notification.style.animation = 'fadeInOut 3s ease-in-out';
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.remove();
+        }, 3000);
+    }
+    
+    // OTP generation
+    function generateOTP() {
+        generatedOTP = Math.floor(1000 + Math.random() * 9000).toString();
+        console.log('Generated OTP:', generatedOTP);
+        return generatedOTP;
+    }
+    
+    // Send OTP
+    async function sendOTP(email) {
+        showLoading();
+        try {
+            const response = await fetchWithTimeout(`${process.env.API_URL || 'https://tttt-tbz0.onrender.com'}/api/send-otp`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email })
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to send OTP');
+            }
+            
+            return true;
+        } catch (error) {
+            console.error('Error sending OTP:', error);
+            showNotification(error.message, 'error');
+            return false;
+        } finally {
+            hideLoading();
+        }
+    }
+    
+    // Verify OTP
+    async function verifyOTP(email, otp) {
+        showLoading();
+        try {
+            const response = await fetchWithTimeout(`${process.env.API_URL || 'https://tttt-tbz0.onrender.com'}/api/verify-otp`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email, otp })
+            });
+            
+            if (!response.ok) {
+                throw new Error('Invalid OTP');
+            }
+            
+            return true;
+        } catch (error) {
+            console.error('Error verifying OTP:', error);
+            showNotification(error.message, 'error');
+            return false;
+        } finally {
+            hideLoading();
+        }
+    }
+    
+    // Register user
+    async function registerUser(name, email, password) {
+        showLoading();
+        try {
+            const response = await fetchWithTimeout(`${process.env.API_URL || 'https://tttt-tbz0.onrender.com'}/api/register`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ name, email, password })
+            });
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.message || 'Registration failed');
+            }
+            
+            // Store token and user data
+            localStorage.setItem('authToken', data.token);
+            localStorage.setItem('currentUser', JSON.stringify(data.user));
+            
+            showNotification('Registration successful!', 'success');
+            document.getElementById('registrationSuccess').style.display = 'block';
+            return true;
+        } catch (error) {
+            console.error('Registration error:', error);
+            showNotification(error.message, 'error');
+            return false;
+        } finally {
+            hideLoading();
+        }
+    }
+    
+    // Login user
+    async function loginUser(email, password) {
+        showLoading();
+        try {
+            const response = await fetchWithTimeout(`${process.env.API_URL || 'https://tttt-tbz0.onrender.com'}/api/login`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email, password })
+            });
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.message || 'Login failed');
+            }
+            
+            // Store token and user data
+            localStorage.setItem('authToken', data.token);
+            localStorage.setItem('currentUser', JSON.stringify(data.user));
+            
+            checkLoginStatus();
+            closeLoginPopup();
+            
+            showNotification('Login successful!', 'success');
+            return true;
+        } catch (error) {
+            console.error('Login error:', error);
+            showNotification(error.message, 'error');
+            return false;
+        } finally {
+            hideLoading();
+        }
+    }
+    
+    // Forgot password
+    async function forgotPassword(email) {
+        showLoading();
+        try {
+            const response = await fetchWithTimeout(`${process.env.API_URL || 'https://tttt-tbz0.onrender.com'}/api/forgot-password`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email })
+            });
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.message || 'Failed to send reset email');
+            }
+            
+            resetPasswordEmail = email;
+            showNotification('Reset email sent successfully', 'success');
+            return true;
+        } catch (error) {
+            console.error('Forgot password error:', error);
+            showNotification(error.message, 'error');
+            return false;
+        } finally {
+            hideLoading();
+        }
+    }
+    
+    // Reset password
+    async function resetPassword(token, newPassword) {
+        showLoading();
+        try {
+            const response = await fetchWithTimeout(`${process.env.API_URL || 'https://tttt-tbz0.onrender.com'}/api/reset-password`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ token, newPassword })
+            });
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.message || 'Password reset failed');
+            }
+            
+            showNotification('Password reset successfully', 'success');
+            openPasswordResetSuccessModal();
+            return true;
+        } catch (error) {
+            console.error('Reset password error:', error);
+            showNotification(error.message, 'error');
+            return false;
+        } finally {
+            hideLoading();
+        }
+    }
+    
+    // Check login status
+    function checkLoginStatus() {
+        const token = localStorage.getItem('authToken');
+        const user = JSON.parse(localStorage.getItem('currentUser') || 'null');
+        
+        const isLoggedIn = !!token && !!user;
+        
+        // Update UI based on login status
+        document.querySelectorAll('.login-button').forEach(btn => {
+            btn.style.display = isLoggedIn ? 'none' : 'flex';
+        });
+        
+        document.querySelectorAll('.profile-dropdown').forEach(dropdown => {
+            dropdown.style.display = isLoggedIn ? 'block' : 'none';
+        });
+        
+        if (isLoggedIn && user) {
+            document.querySelectorAll('.profile-icon').forEach(icon => {
+                icon.textContent = user.name.charAt(0).toUpperCase();
+            });
+        }
+        
+        return isLoggedIn;
+    }
+    
+    // Logout
+    function handleLogout() {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('currentUser');
+        
+        checkLoginStatus();
+        showNotification('Logged out successfully', 'success');
+    }
     
     // Initialize login forms
-    const initLoginForms = () => {
-        // Email check form submission
+    function initLoginForms() {
+        // Email check form
         document.getElementById('emailCheckForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
             const email = document.getElementById('checkEmail').value.trim();
             
             if (!validateEmail(email)) {
-                showError('checkEmailError', 'Please provide a valid email');
+                showError('checkEmailError', 'Please enter a valid email');
                 return;
             }
             
-            showLoading();
-            try {
-                const response = await fetch('/api/send-otp', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ email })
-                });
-                
-                const result = await response.json();
-                
-                if (!response.ok) {
-                    throw new Error(result.message || 'Failed to send OTP');
-                }
-                
+            const otp = generateOTP();
+            const otpSent = await sendOTP(email);
+            
+            if (otpSent) {
                 currentUserEmail = email;
                 document.getElementById('userEmail').textContent = email;
                 toggleForm('otpVerification');
                 startOTPTimer();
-                
-            } catch (error) {
-                console.error('Error sending OTP:', error);
-                showError('checkEmailError', error.message);
-            } finally {
-                hideLoading();
             }
         });
         
-        // OTP verification form submission
+        // OTP verification form
         document.getElementById('otpVerificationForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
@@ -2307,48 +2651,35 @@ const LoginModule = (() => {
             const otp2 = document.getElementById('otp2').value;
             const otp3 = document.getElementById('otp3').value;
             const otp4 = document.getElementById('otp4').value;
-            
             const otp = otp1 + otp2 + otp3 + otp4;
             
-            if (otp.length !== 4 || !/^\d+$/.test(otp)) {
+            if (otp.length !== 4) {
                 showError('otpError', 'Please enter a valid 4-digit OTP');
                 return;
             }
             
-            showLoading();
-            try {
-                const response = await fetch('/api/verify-otp', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        email: currentUserEmail,
-                        otp
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (!response.ok) {
-                    throw new Error(result.message || 'OTP verification failed');
-                }
-                
+            const verified = await verifyOTP(currentUserEmail, otp);
+            
+            if (verified) {
                 if (resetPasswordEmail) {
                     toggleForm('resetPassword');
                 } else {
                     toggleForm('signup');
                 }
-                
-            } catch (error) {
-                console.error('Error verifying OTP:', error);
-                showError('otpError', error.message);
-            } finally {
-                hideLoading();
             }
         });
         
-        // Registration form submission
+        // Resend OTP button
+        document.getElementById('resendOtp').addEventListener('click', async function() {
+            const otp = generateOTP();
+            const otpSent = await sendOTP(currentUserEmail);
+            
+            if (otpSent) {
+                startOTPTimer();
+            }
+        });
+        
+        // Signup form
         document.getElementById('signupForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
@@ -2356,7 +2687,6 @@ const LoginModule = (() => {
             const password = document.getElementById('signupPassword').value;
             const confirmPassword = document.getElementById('signupConfirmPassword').value;
             
-            // Validation
             if (name.length < 2) {
                 showError('signupNameError', 'Name is required');
                 return;
@@ -2372,53 +2702,15 @@ const LoginModule = (() => {
                 return;
             }
             
-            showLoading();
-            try {
-                const response = await fetch('/api/register', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        name,
-                        email: currentUserEmail,
-                        password,
-                        otp: generatedOTP
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (!response.ok) {
-                    throw new Error(result.message || 'Registration failed');
-                }
-                
-                // Store token and user data
-                localStorage.setItem('authToken', result.token);
-                localStorage.setItem('currentUser', JSON.stringify(result.user));
-                
-                // Show success and redirect
+            const registered = await registerUser(name, currentUserEmail, password);
+            
+            if (registered) {
                 document.getElementById('registrationSuccess').style.display = 'block';
                 toggleForm('login');
-                
-                // Update UI
-                checkLoginStatus();
-                
-            } catch (error) {
-                console.error('Registration error:', error);
-                
-                if (error.message.includes('already exists')) {
-                    showError('signupNameError', 'Email already registered');
-                    toggleForm('login');
-                } else {
-                    showNotification(error.message, 'error');
-                }
-            } finally {
-                hideLoading();
             }
         });
         
-        // Login form submission
+        // Login form
         document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
@@ -2426,7 +2718,7 @@ const LoginModule = (() => {
             const password = document.getElementById('loginPassword').value;
             
             if (!validateEmail(email)) {
-                showError('loginEmailError', 'Please provide a valid email');
+                showError('loginEmailError', 'Please enter a valid email');
                 return;
             }
             
@@ -2435,84 +2727,31 @@ const LoginModule = (() => {
                 return;
             }
             
-            showLoading();
-            try {
-                const response = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ email, password })
-                });
-                
-                const result = await response.json();
-                
-                if (!response.ok) {
-                    throw new Error(result.message || 'Login failed');
-                }
-                
-                // Store token and user data
-                localStorage.setItem('authToken', result.token);
-                localStorage.setItem('currentUser', JSON.stringify(result.user));
-                
-                // Update UI
-                checkLoginStatus();
-                
-                // Close login popup
-                closeLoginPopup();
-                
-                // Show success message
-                showNotification('Logged in successfully!', 'success');
-                
-            } catch (error) {
-                console.error('Login error:', error);
-                showError('loginPasswordError', error.message || 'Invalid credentials');
-            } finally {
-                hideLoading();
-            }
+            await loginUser(email, password);
         });
         
-        // Forgot password form submission
+        // Forgot password form
         document.getElementById('forgotPasswordForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
             const email = document.getElementById('forgotEmail').value.trim();
             
             if (!validateEmail(email)) {
-                showError('forgotEmailError', 'Please provide a valid email');
+                showError('forgotEmailError', 'Please enter a valid email');
                 return;
             }
             
-            showLoading();
-            try {
-                const response = await fetch('/api/forgot-password', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ email })
-                });
-                
-                const result = await response.json();
-                
-                if (!response.ok) {
-                    throw new Error(result.message || 'Failed to send OTP');
-                }
-                
+            const emailSent = await forgotPassword(email);
+            
+            if (emailSent) {
                 resetPasswordEmail = email;
                 document.getElementById('userEmail').textContent = email;
                 toggleForm('otpVerification');
                 startOTPTimer();
-                
-            } catch (error) {
-                console.error('Forgot password error:', error);
-                showError('forgotEmailError', error.message);
-            } finally {
-                hideLoading();
             }
         });
         
-        // Reset password form submission
+        // Reset password form
         document.getElementById('resetPasswordForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
@@ -2529,47 +2768,48 @@ const LoginModule = (() => {
                 return;
             }
             
-            showLoading();
-            try {
-                const response = await fetch('/api/reset-password', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        email: resetPasswordEmail,
-                        otp: generatedOTP,
-                        newPassword
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (!response.ok) {
-                    throw new Error(result.message || 'Password reset failed');
-                }
-                
-                // Show success and redirect to login
-                openPasswordResetSuccessModal();
-                
-            } catch (error) {
-                console.error('Reset password error:', error);
-                showNotification(error.message, 'error');
-            } finally {
-                hideLoading();
+            // Get token from URL or storage
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token') || resetPasswordToken;
+            
+            if (!token) {
+                showError('resetNewPasswordError', 'Invalid reset token');
+                return;
             }
+            
+            await resetPassword(token, newPassword);
         });
         
-        // Other event listeners...
-    };
+        // OTP input auto-focus
+        const otpInputs = document.querySelectorAll('.otp-digit');
+        otpInputs.forEach((input, index) => {
+            input.addEventListener('input', function() {
+                if (this.value.length === 1 && index < otpInputs.length - 1) {
+                    otpInputs[index + 1].focus();
+                }
+            });
+            
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Backspace' && this.value.length === 0 && index > 0) {
+                    otpInputs[index - 1].focus();
+                }
+            });
+        });
+    }
     
-    // Helper functions (startOTPTimer, validateEmail, etc.) remain the same...
-    
+    // Public methods
     return {
+        handleLogin: () => {
+            document.querySelector('.login-popup').classList.add('active');
+            document.querySelector('.blur-overlay').classList.add('active');
+            toggleForm('login');
+        },
+        closeLoginPopup: () => {
+            document.querySelector('.login-popup').classList.remove('active');
+            document.querySelector('.blur-overlay').classList.remove('active');
+        },
         initLoginForms,
         checkLoginStatus,
-        handleLogin,
-        closeLoginPopup,
         handleLogout
     };
 })();
@@ -2579,15 +2819,27 @@ document.addEventListener('DOMContentLoaded', function() {
     LoginModule.initLoginForms();
     LoginModule.checkLoginStatus();
     
-    // Set up login button handlers
-    document.querySelectorAll('.login-button').forEach(button => {
-        button.addEventListener('click', LoginModule.handleLogin);
+    // Add login button handlers
+    document.querySelectorAll('.login-button').forEach(btn => {
+        btn.addEventListener('click', LoginModule.handleLogin);
     });
     
-    // Other initialization code...
+    // Add logout button handlers
+    document.querySelectorAll('.logout-button').forEach(btn => {
+        btn.addEventListener('click', LoginModule.handleLogout);
+    });
+    
+    // Check for password reset token in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const resetToken = urlParams.get('token');
+    
+    if (resetToken && window.location.pathname.includes('reset-password')) {
+        LoginModule.handleLogin();
+        toggleForm('resetPassword');
+        resetPasswordToken = resetToken;
+    }
 });
 </script>
-
 
 
 
