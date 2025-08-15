@@ -9,374 +9,6 @@ const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
 
 dotenv.config()
-
-mongoose.connect(process.env.MONGO_URI || "mongodb://localhost:27017/talimul_islam", {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-
-mongoose.connection.on("connected", () => {
-  console.log("✅ MongoDB Connected Successfully")
-})
-
-mongoose.connection.on("error", (err) => {
-  console.error("❌ MongoDB Connection Error:", err)
-})
-
-const userSchema = new mongoose.Schema(
-  {
-    name: { type: String, required: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true },
-    password: { type: String, required: true },
-    phone: { type: String, trim: true },
-    courses: [{ type: String }],
-    otp: { type: String },
-    otpExpires: { type: Date },
-    emailVerified: { type: Boolean, default: false },
-    registeredAt: { type: Date, default: Date.now },
-    lastLogin: { type: Date },
-    lastOtpSent: { type: Date },
-    profile: {
-      avatar: String,
-      bio: String,
-      location: String,
-      dateOfBirth: Date,
-    },
-    preferences: {
-      notifications: { type: Boolean, default: true },
-      language: { type: String, default: "bn" },
-      theme: { type: String, default: "light" },
-    },
-  },
-  { timestamps: true },
-)
-
-const courseSchema = new mongoose.Schema(
-  {
-    title: { type: String, required: true },
-    description: { type: String, required: true },
-    instructor: { type: String, required: true },
-    price: { type: Number, required: true },
-    duration: { type: String, required: true },
-    level: { type: String, enum: ["beginner", "intermediate", "advanced"], default: "beginner" },
-    category: { type: String, required: true },
-    thumbnail: { type: String },
-    curriculum: [
-      {
-        title: String,
-        duration: String,
-        videoUrl: String,
-        materials: [String],
-      },
-    ],
-    rating: { type: Number, default: 0 },
-    totalRatings: { type: Number, default: 0 },
-    enrolledStudents: { type: Number, default: 0 },
-    isActive: { type: Boolean, default: true },
-    tags: [String],
-    requirements: [String],
-    whatYouWillLearn: [String],
-  },
-  { timestamps: true },
-)
-
-const paymentSchema = new mongoose.Schema(
-  {
-    name: { type: String, required: true },
-    email: { type: String, required: true },
-    phone: { type: String, required: true },
-    courseId: { type: String, required: true },
-    courseName: { type: String },
-    amount: { type: Number, required: true },
-    paymentMethod: { type: String, required: true },
-    transactionId: { type: String, required: true },
-    screenshot: { type: String },
-    status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
-    submittedAt: { type: Date, default: Date.now },
-    processedAt: { type: Date },
-    adminNote: { type: String },
-    ipAddress: { type: String },
-    userAgent: { type: String },
-  },
-  { timestamps: true },
-)
-
-const progressSchema = new mongoose.Schema(
-  {
-    userId: { type: String, required: true },
-    courseId: { type: String, required: true },
-    completedLessons: [{ type: String }],
-    totalLessons: { type: Number, default: 0 },
-    completionPercentage: { type: Number, default: 0 },
-    timeSpent: { type: Number, default: 0 },
-    lastAccessedLesson: { type: String },
-    enrolledAt: { type: Date, default: Date.now },
-    completedAt: { type: Date },
-    certificateIssued: { type: Boolean, default: false },
-    certificateUrl: { type: String },
-    quizScores: [
-      {
-        lessonId: String,
-        score: Number,
-        maxScore: Number,
-        attemptedAt: Date,
-      },
-    ],
-  },
-  { timestamps: true },
-)
-
-const reviewSchema = new mongoose.Schema(
-  {
-    courseId: { type: String, required: true },
-    userEmail: { type: String, required: true },
-    userName: { type: String, required: true },
-    rating: { type: Number, required: true, min: 1, max: 5 },
-    comment: { type: String, required: true },
-    isApproved: { type: Boolean, default: false },
-    adminResponse: { type: String },
-    helpful: { type: Number, default: 0 },
-  },
-  { timestamps: true },
-)
-
-const notificationSchema = new mongoose.Schema(
-  {
-    type: { type: String, required: true },
-    title: { type: String, required: true },
-    message: { type: String, required: true },
-    recipient: { type: String },
-    data: { type: mongoose.Schema.Types.Mixed },
-    isRead: { type: Boolean, default: false },
-    priority: { type: String, enum: ["low", "medium", "high"], default: "medium" },
-  },
-  { timestamps: true },
-)
-
-const User = mongoose.model("User", userSchema)
-const Course = mongoose.model("Course", courseSchema)
-const Payment = mongoose.model("Payment", paymentSchema)
-const Progress = mongoose.model("Progress", progressSchema)
-const Review = mongoose.model("Review", reviewSchema)
-const Notification = mongoose.model("Notification", notificationSchema)
-
-const validateUserRegistration = (req, res, next) => {
-  const { name, email, password } = req.body
-  const errors = []
-
-  if (!name || name.trim().length < 2) {
-    errors.push("নাম কমপক্ষে ২ অক্ষরের হতে হবে")
-  }
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  if (!email || !emailRegex.test(email)) {
-    errors.push("বৈধ ইমেইল ঠিকানা প্রয়োজন")
-  }
-
-  if (!password || password.length < 6) {
-    errors.push("পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে")
-  }
-
-  if (errors.length > 0) {
-    return res.status(400).json({ message: errors.join(", ") })
-  }
-
-  next()
-}
-
-const validatePayment = (req, res, next) => {
-  const { name, email, phone, courseId, amount, paymentMethod, transactionId } = req.body
-  const errors = []
-
-  if (!name || name.trim().length < 2) {
-    errors.push("নাম প্রয়োজন")
-  }
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  if (!email || !emailRegex.test(email)) {
-    errors.push("বৈধ ইমেইল প্রয়োজন")
-  }
-
-  const phoneRegex = /^(\+88)?01[3-9]\d{8}$/
-  if (!phone || !phoneRegex.test(phone.replace(/\s/g, ""))) {
-    errors.push("বৈধ ফোন নম্বর প্রয়োজন")
-  }
-
-  if (!courseId) {
-    errors.push("কোর্স নির্বাচন প্রয়োজন")
-  }
-
-  if (!amount || amount <= 0) {
-    errors.push("বৈধ পরিমাণ প্রয়োজন")
-  }
-
-  if (!paymentMethod) {
-    errors.push("পেমেন্ট পদ্ধতি নির্বাচন প্রয়োজন")
-  }
-
-  if (!transactionId || transactionId.trim().length < 5) {
-    errors.push("ট্রানজেকশন আইডি প্রয়োজন")
-  }
-
-  if (errors.length > 0) {
-    return res.status(400).json({ message: errors.join(", ") })
-  }
-
-  next()
-}
-
-const validateCourse = (req, res, next) => {
-  const { title, description, instructor, price, duration } = req.body
-  const errors = []
-
-  if (!title || title.trim().length < 3) {
-    errors.push("কোর্সের শিরোনাম কমপক্ষে ৩ অক্ষরের হতে হবে")
-  }
-
-  if (!description || description.trim().length < 10) {
-    errors.push("কোর্সের বিবরণ কমপক্ষে ১০ অক্ষরের হতে হবে")
-  }
-
-  if (!instructor || instructor.trim().length < 2) {
-    errors.push("প্রশিক্ষকের নাম প্রয়োজন")
-  }
-
-  if (!price || price < 0) {
-    errors.push("বৈধ মূল্য প্রয়োজন")
-  }
-
-  if (!duration) {
-    errors.push("কোর্সের সময়কাল প্রয়োজন")
-  }
-
-  if (errors.length > 0) {
-    return res.status(400).json({ message: errors.join(", ") })
-  }
-
-  next()
-}
-
-class DatabaseService {
-  async createPayment(paymentData) {
-    const payment = new Payment(paymentData)
-    return await payment.save()
-  }
-
-  async getPayments({ status, page = 1, limit = 10, search = "" }) {
-    const query = {}
-    if (status && status !== "all") query.status = status
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
-        { transactionId: { $regex: search, $options: "i" } },
-      ]
-    }
-
-    const payments = await Payment.find(query)
-      .sort({ submittedAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
-
-    const total = await Payment.countDocuments(query)
-
-    return {
-      payments,
-      totalPages: Math.ceil(total / limit),
-      currentPage: page,
-      total,
-    }
-  }
-
-  async approvePayment(paymentId, status, adminNote) {
-    const payment = await Payment.findById(paymentId)
-    if (!payment) {
-      return { success: false, message: "পেমেন্ট পাওয়া যায়নি" }
-    }
-
-    payment.status = status
-    payment.processedAt = new Date()
-    if (adminNote) payment.adminNote = adminNote
-
-    await payment.save()
-    return { success: true, payment }
-  }
-
-  async getUserCourses(email) {
-    const user = await User.findOne({ email })
-    if (!user) return []
-
-    const courses = await Course.find({ _id: { $in: user.courses } })
-    return courses
-  }
-
-  async grantCourseAccess(email, courseId) {
-    const user = await User.findOne({ email })
-    if (user && !user.courses.includes(courseId)) {
-      user.courses.push(courseId)
-      await user.save()
-    }
-  }
-
-  async getCourses() {
-    return await Course.find({ isActive: true }).sort({ createdAt: -1 })
-  }
-
-  async createCourse(courseData) {
-    const course = new Course(courseData)
-    return await course.save()
-  }
-
-  async getUserProgress(email) {
-    return await Progress.find({ userId: email }).populate("courseId")
-  }
-
-  async createProgress(progressData) {
-    const progress = new Progress(progressData)
-    return await progress.save()
-  }
-
-  async updateProgress(email, courseId, lessonId, completed, timeSpent) {
-    let progress = await Progress.findOne({ userId: email, courseId })
-
-    if (!progress) {
-      progress = new Progress({ userId: email, courseId, completedLessons: [], timeSpent: 0 })
-    }
-
-    if (completed && !progress.completedLessons.includes(lessonId)) {
-      progress.completedLessons.push(lessonId)
-    }
-
-    progress.timeSpent += timeSpent || 0
-    progress.lastAccessedLesson = lessonId
-    progress.completionPercentage = Math.round((progress.completedLessons.length / progress.totalLessons) * 100)
-
-    return await progress.save()
-  }
-
-  async getCourseReviews(courseId) {
-    return await Review.find({ courseId, isApproved: true }).sort({ createdAt: -1 })
-  }
-
-  async createReview(reviewData) {
-    const review = new Review(reviewData)
-    return await review.save()
-  }
-
-  async createNotification(notificationData) {
-    const notification = new Notification(notificationData)
-    return await notification.save()
-  }
-
-  async getNotifications() {
-    return await Notification.find().sort({ createdAt: -1 }).limit(50)
-  }
-
-  async markNotificationAsRead(notificationId) {
-    return await Notification.findByIdAndUpdate(notificationId, { isRead: true })
-  }
-}
-
 const app = express()
 const server = http.createServer(app)
 const io = new Server(server, {
@@ -385,226 +17,155 @@ const io = new Server(server, {
   },
 })
 
-const dbService = new DatabaseService()
+// MongoDB কানেকশন
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => console.log("MongoDB Connected"))
+  .catch((err) => console.error("MongoDB Connection Error:", err))
+
+// মডেল ডিফাইন
+const User = mongoose.model(
+  "User",
+  new mongoose.Schema({
+    name: String,
+    email: { type: String, unique: true },
+    password: String,
+    courses: [String],
+    otp: String,
+    otpExpires: Date,
+    resetToken: String,
+    resetTokenExpires: Date,
+  }),
+)
+
+const Payment = mongoose.model(
+  "Payment",
+  new mongoose.Schema({
+    userId: String,
+    name: String,
+    email: String,
+    phone: String,
+    courseId: String,
+    courseName: String,
+    paymentMethod: String,
+    txnId: String,
+    amount: Number,
+    status: { type: String, default: "pending" },
+    date: { type: Date, default: Date.now },
+  }),
+)
+
+const Course = mongoose.model(
+  "Course",
+  new mongoose.Schema({
+    id: String,
+    title: String,
+    description: String,
+    price: Number,
+    duration: String,
+    instructor: String,
+    createdAt: { type: Date, default: Date.now },
+  }),
+)
 
 // মিডলওয়্যার
 app.use(cors())
 app.use(express.json())
 
-// ======= Enhanced User Routes =======
+// ====== নতুন পেমেন্ট ভ্যালিডেশন মিডলওয়্যার ======
+const validatePayment = (req, res, next) => {
+  const { name, email, phone, courseId, paymentMethod, txnId, amount } = req.body
 
+  if (!name || !email || !phone || !courseId || !paymentMethod || !txnId || !amount) {
+    return res.status(400).json({ message: "সমস্ত প্রয়োজনীয় ফিল্ড পূরণ করুন" })
+  }
+
+  if (!["bkash", "nagad", "bank", "card"].includes(paymentMethod)) {
+    return res.status(400).json({ message: "অবৈধ পেমেন্ট মাধ্যম" })
+  }
+
+  next()
+}
+
+// ======= নতুন রাউট =======
 app.get("/api/users/:email/courses", async (req, res) => {
   try {
-    const userCourses = await dbService.getUserCourses(req.params.email)
-    res.json({ courses: userCourses })
+    const user = await User.findOne({ email: req.params.email })
+    if (!user) {
+      return res.status(404).json({ message: "User not found" })
+    }
+    res.json({ courses: user.courses || [] })
   } catch (error) {
     console.error("Error fetching user courses:", error)
     res.status(500).json({ message: "Error fetching user courses" })
   }
 })
 
-app.get("/api/users/:email/progress", async (req, res) => {
-  try {
-    const progress = await dbService.getUserProgress(req.params.email)
-    res.json(progress)
-  } catch (error) {
-    console.error("Error fetching user progress:", error)
-    res.status(500).json({ message: "অগ্রগতি লোড করতে সমস্যা হয়েছে" })
-  }
-})
-
-app.post("/api/users/:email/progress", async (req, res) => {
-  try {
-    const { courseId, lessonId, completed, timeSpent } = req.body
-    const progress = await dbService.updateProgress(req.params.email, courseId, lessonId, completed, timeSpent)
-    res.json(progress)
-  } catch (error) {
-    console.error("Error updating progress:", error)
-    res.status(500).json({ message: "অগ্রগতি আপডেট করতে সমস্যা হয়েছে" })
-  }
-})
-
-// OTP রাউটস (Clean & Enhanced)
+// OTP রাউটস
 app.post("/api/send-otp", async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email } = req.body
+    const otp = Math.floor(1000 + Math.random() * 9000).toString()
 
-    // Check email presence
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: "ইমেইল প্রয়োজন",
-      });
-    }
-
-    // Generate a 4-digit OTP
-    const otp = Math.floor(1000 + Math.random() * 9000).toString();
-
-    // Save OTP to database (User model)
-    await User.findOneAndUpdate(
-      { email: email.toLowerCase().trim() },
-      {
-        otp: otp,
-        otpExpires: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes from now
-        lastOtpSent: new Date(),
-      },
-      { upsert: true, new: true }
-    );
-
-    // Configure nodemailer
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
-    });
+    })
 
-    // Prepare mail options
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: email,
       subject: "তালিমুল ইসলাম একাডেমি - OTP কোড",
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #2563eb; text-align: center;">তালিমুল ইসলাম একাডেমি</h2>
-          <div style="background: #f8fafc; padding: 20px; border-radius: 8px; text-align: center;">
-            <h3 style="color: #1e293b;">আপনার OTP কোড</h3>
-            <div style="font-size: 32px; font-weight: bold; color: #059669; letter-spacing: 4px; margin: 20px 0;">
-              ${otp}
-            </div>
-            <p style="color: #64748b;">এই কোডটি ৫ মিনিটের জন্য বৈধ</p>
-          </div>
-        </div>
-      `,
-    };
+      text: `আপনার OTP কোড: ${otp}`,
+    }
 
-    // Send email
-    await transporter.sendMail(mailOptions);
+    await transporter.sendMail(mailOptions)
 
-    // Respond success
-    res.json({
-      success: true,
-      message: "OTP সফলভাবে পাঠানো হয়েছে",
-      otp, // Optional: Only for testing, remove in production
-    });
+    await User.findOneAndUpdate({ email }, { otp, otpExpires: Date.now() + 300000 }, { upsert: true, new: true })
+
+    res.json({ success: true, message: "OTP সফলভাবে পাঠানো হয়েছে" })
   } catch (error) {
-    console.error("Error sending OTP:", error);
-    res.status(500).json({
-      success: false,
-      message: "OTP পাঠাতে সমস্যা হয়েছে",
-    });
+    console.error("Error sending OTP:", error)
+    res.status(500).json({ success: false, message: "OTP পাঠাতে সমস্যা হয়েছে" })
   }
-});
-
-
-
+})
 
 app.post("/api/verify-otp", async (req, res) => {
   try {
-    const { email, otp } = req.body;
+    const { email, otp } = req.body
 
-    // Enhanced validation
-    if (!email || !otp) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "ইমেইল এবং OTP প্রয়োজন" 
-      });
+    const user = await User.findOne({ email })
+
+    if (!user || user.otp !== otp) {
+      return res.status(400).json({ success: false, message: "অবৈধ OTP" })
     }
 
-    // Clean and validate OTP format
-    const cleanOTP = String(otp).trim().replace(/\D/g, '');
-    if (cleanOTP.length !== 4) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "অবৈধ OTP ফর্ম্যাট - ৪ সংখ্যার OTP প্রয়োজন" 
-      });
+    if (user.otpExpires < Date.now()) {
+      return res.status(400).json({ success: false, message: "OTP এর মেয়াদ শেষ হয়ে গেছে" })
     }
 
-    // Find user with case-insensitive email
-    const user = await User.findOne({ 
-      email: { $regex: new RegExp(email, 'i') } 
-    });
+    user.otp = undefined
+    user.otpExpires = undefined
+    await user.save()
 
-    if (!user) {
-      console.log("User not found for email:", email);
-      return res.status(400).json({ 
-        success: false, 
-        message: "ব্যবহারকারী পাওয়া যায়নি" 
-      });
-    }
-
-    // Check if OTP exists and is not expired
-    if (!user.otp) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "কোনো OTP পাওয়া যায়নি। নতুন OTP চান।" 
-      });
-    }
-
-    if (user.otpExpires && user.otpExpires < Date.now()) {
-      // Clear expired OTP
-      user.otp = undefined;
-      user.otpExpires = undefined;
-      await user.save();
-      return res.status(400).json({ 
-        success: false, 
-        message: "OTP এর মেয়াদ শেষ হয়ে গেছে। নতুন OTP চান।" 
-      });
-    }
-
-    // Compare OTPs after ensuring same type and format
-    const storedOTP = String(user.otp).trim().replace(/\D/g, '');
-    
-    if (storedOTP !== cleanOTP) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "অবৈধ OTP" 
-      });
-    }
-
-    // Verification successful - update user
-    user.otp = undefined;
-    user.otpExpires = undefined;
-    user.emailVerified = true;
-    user.lastLogin = new Date();
-    await user.save();
-
-    console.log("OTP verification successful for:", email);
-
-    res.json({ 
-      success: true, 
-      message: "OTP সফলভাবে যাচাই হয়েছে" 
-    });
+    res.json({ success: true })
   } catch (error) {
-    console.error("Error verifying OTP:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "OTP যাচাই করতে সমস্যা হয়েছে" 
-    });
+    console.error("Error verifying OTP:", error)
+    res.status(500).json({ success: false, message: "OTP যাচাই করতে সমস্যা হয়েছে" })
   }
-});
+})
 
-// Enhanced Payment Routes
+// পেমেন্ট রাউটস (মিডলওয়্যার যুক্ত করা হয়েছে)
 app.post("/api/payments", validatePayment, async (req, res) => {
   try {
-    const paymentData = {
-      ...req.body,
-      status: "pending",
-      submittedAt: new Date(),
-      ipAddress: req.ip,
-    }
-
-    const payment = await dbService.createPayment(paymentData)
-
-    await dbService.createNotification({
-      type: "new_payment",
-      title: "নতুন পেমেন্ট রিকুয়েস্ট",
-      message: `${payment.name} একটি নতুন পেমেন্ট জমা দিয়েছেন`,
-      data: { paymentId: payment._id },
-    })
+    const payment = new Payment(req.body)
+    await payment.save()
 
     await notifyAdmin(payment._id)
+
     res.status(201).json(payment)
   } catch (error) {
     console.error("Error saving payment:", error)
@@ -615,8 +176,30 @@ app.post("/api/payments", validatePayment, async (req, res) => {
 app.get("/api/admin/payments", async (req, res) => {
   try {
     const { status, page = 1, limit = 10, search = "" } = req.query
-    const payments = await dbService.getPayments({ status, page, limit, search })
-    res.json(payments)
+
+    const query = {}
+    if (status) query.status = status
+
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { txnId: { $regex: search, $options: "i" } },
+      ]
+    }
+
+    const payments = await Payment.find(query)
+      .sort({ date: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+
+    const count = await Payment.countDocuments(query)
+
+    res.json({
+      payments,
+      totalPages: Math.ceil(count / limit),
+      currentPage: page,
+    })
   } catch (error) {
     console.error("Error fetching payments:", error)
     res.status(500).json({ message: "পেমেন্ট লোড করতে সমস্যা হয়েছে" })
@@ -636,11 +219,13 @@ app.get("/api/admin/payments/:id", async (req, res) => {
   }
 })
 
-// Enhanced Payment Approval
+// ✅ আপডেটেড PUT রাউট
+// Update the PUT route for payment approval
 app.put("/api/admin/payments/:id", async (req, res) => {
   try {
-    const { status, adminNote } = req.body
+    const { status } = req.body
 
+    // Validation
     if (!status || !["approved", "rejected", "pending"].includes(status)) {
       return res.status(400).json({
         success: false,
@@ -648,27 +233,30 @@ app.put("/api/admin/payments/:id", async (req, res) => {
       })
     }
 
-    const result = await dbService.approvePayment(req.params.id, status, adminNote)
+    // Update payment
+    const payment = await Payment.findByIdAndUpdate(req.params.id, { status }, { new: true })
 
-    if (!result.success) {
-      return res.status(404).json(result)
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        message: "Payment not found",
+      })
     }
 
-    const { payment } = result
+    console.log(`Payment ${payment._id} status updated to: ${status}`)
 
-    // If approved, handle course access and notifications
+    // If approved
     if (status === "approved") {
-      // Grant course access
-      await dbService.grantCourseAccess(payment.email, payment.courseId)
+      // Update user's course access
+      const user = await User.findOneAndUpdate(
+        { email: payment.email },
+        { $addToSet: { courses: payment.courseId } },
+        { new: true, upsert: true },
+      )
 
-      // Create progress tracking
-      await dbService.createProgress({
-        userId: payment.email,
-        courseId: payment.courseId,
-        enrolledAt: new Date(),
-      })
+      console.log(`User ${payment.email} granted access to course ${payment.courseId}`)
 
-      // Send real-time notification
+      // Send real-time notification to all connected clients
       const notification = {
         type: "courseAccessUpdated",
         email: payment.email,
@@ -679,13 +267,17 @@ app.put("/api/admin/payments/:id", async (req, res) => {
         timestamp: new Date().toISOString(),
       }
 
+      // Emit to all connected clients
       io.emit("courseAccessUpdated", notification)
 
-      // Send email notification
+      console.log("Course access notification broadcasted:", notification)
+
+      // Optional: Send email notification to user
       try {
         await sendCourseAccessEmail(payment.email, payment.name, payment.courseName || payment.courseId)
       } catch (emailError) {
         console.error("Failed to send email notification:", emailError)
+        // Don't fail the request if email fails
       }
     }
 
@@ -704,10 +296,18 @@ app.put("/api/admin/payments/:id", async (req, res) => {
   }
 })
 
-// Enhanced Course Routes
+// server.js-তে নোটিফিকেশন ইভেন্ট যোগ করুন
+io.on("connection", (socket) => {
+  console.log("A user connected")
+  socket.on("disconnect", () => {
+    console.log("A user disconnected")
+  })
+})
+
+// কোর্স রাউটস
 app.get("/api/courses", async (req, res) => {
   try {
-    const courses = await dbService.getCourses()
+    const courses = await Course.find()
     res.json(courses)
   } catch (error) {
     console.error("Error fetching courses:", error)
@@ -715,44 +315,11 @@ app.get("/api/courses", async (req, res) => {
   }
 })
 
-app.post("/api/admin/courses", validateCourse, async (req, res) => {
-  try {
-    const course = await dbService.createCourse(req.body)
-    res.status(201).json(course)
-  } catch (error) {
-    console.error("Error creating course:", error)
-    res.status(500).json({ message: "কোর্স তৈরি করতে সমস্যা হয়েছে" })
-  }
-})
+// Authentication Routes
+const saltRounds = 10
 
-app.get("/api/courses/:id/reviews", async (req, res) => {
-  try {
-    const reviews = await dbService.getCourseReviews(req.params.id)
-    res.json(reviews)
-  } catch (error) {
-    console.error("Error fetching reviews:", error)
-    res.status(500).json({ message: "রিভিউ লোড করতে সমস্যা হয়েছে" })
-  }
-})
-
-app.post("/api/courses/:id/reviews", async (req, res) => {
-  try {
-    const { rating, comment, userEmail } = req.body
-    const review = await dbService.createReview({
-      courseId: req.params.id,
-      userEmail,
-      rating,
-      comment,
-    })
-    res.status(201).json(review)
-  } catch (error) {
-    console.error("Error creating review:", error)
-    res.status(500).json({ message: "রিভিউ জমা দিতে সমস্যা হয়েছে" })
-  }
-})
-
-// Enhanced Authentication Routes
-app.post("/api/register", validateUserRegistration, async (req, res) => {
+// Registration route
+app.post("/api/register", async (req, res) => {
   try {
     const { name, email, password } = req.body
 
@@ -761,19 +328,19 @@ app.post("/api/register", validateUserRegistration, async (req, res) => {
       return res.status(400).json({ message: "User already exists" })
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10)
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, saltRounds)
 
     const user = new User({
       name,
       email,
       password: hashedPassword,
       courses: [],
-      registeredAt: new Date(),
-      lastLogin: new Date(),
     })
 
     await user.save()
 
+    // Generate JWT token
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1d" })
 
     res.status(201).json({
@@ -791,6 +358,7 @@ app.post("/api/register", validateUserRegistration, async (req, res) => {
   }
 })
 
+// Login route
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body
@@ -800,14 +368,13 @@ app.post("/api/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" })
     }
 
+    // Compare hashed password
     const isMatch = await bcrypt.compare(password, user.password)
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid credentials" })
     }
 
-    user.lastLogin = new Date()
-    await user.save()
-
+    // Generate JWT token
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1d" })
 
     res.json({
@@ -825,30 +392,13 @@ app.post("/api/login", async (req, res) => {
   }
 })
 
-app.get("/api/admin/notifications", async (req, res) => {
-  try {
-    const notifications = await dbService.getNotifications()
-    res.json(notifications)
-  } catch (error) {
-    console.error("Error fetching notifications:", error)
-    res.status(500).json({ message: "নোটিফিকেশন লোড করতে সমস্যা হয়েছে" })
-  }
-})
-
-app.put("/api/admin/notifications/:id/read", async (req, res) => {
-  try {
-    await dbService.markNotificationAsRead(req.params.id)
-    res.json({ success: true })
-  } catch (error) {
-    console.error("Error marking notification as read:", error)
-    res.status(500).json({ message: "নোটিফিকেশন আপডেট করতে সমস্যা হয়েছে" })
-  }
-})
-
-// Enhanced helper functions
+// হেল্পার ফাংশন
 async function notifyAdmin(paymentId) {
   console.log(`New payment created: ${paymentId}`)
-  io.emit("newPayment", { paymentId, timestamp: new Date() })
+}
+
+async function notifyUser(email, courseId) {
+  console.log(`User with email ${email} granted access to course ${courseId}`)
 }
 
 async function sendCourseAccessEmail(email, name, courseName) {
@@ -866,86 +416,41 @@ async function sendCourseAccessEmail(email, name, courseName) {
       to: email,
       subject: "তালিমুল ইসলাম একাডেমি - কোর্স অনুমোদিত হয়েছে",
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f8fafc;">
-          <div style="background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-            <div style="text-align: center; margin-bottom: 30px;">
-              <h1 style="color: #2563eb; margin: 0;">তালিমুল ইসলাম একাডেমি</h1>
-              <div style="width: 50px; height: 3px; background: #10b981; margin: 10px auto;"></div>
-            </div>
-            
-            <h2 style="color: #059669; text-align: center; margin-bottom: 20px;">🎉 অভিনন্দন!</h2>
-            
-            <p style="font-size: 16px; line-height: 1.6; color: #374151;">প্রিয় <strong>${name}</strong>,</p>
-            
-            <p style="font-size: 16px; line-height: 1.6; color: #374151;">
-              আপনার পেমেন্ট সফলভাবে অনুমোদিত হয়েছে এবং <strong style="color: #2563eb;">"${courseName}"</strong> কোর্সে আপনার অ্যাক্সেস চালু করা হয়েছে।
-            </p>
-            
-            <div style="background: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #2563eb;">
-              <p style="margin: 0; color: #1e40af; font-weight: 500;">এখন আপনি পাবেন:</p>
-              <ul style="color: #374151; margin: 10px 0;">
-                <li>সমস্ত ভিডিও লেকচার</li>
-                <li>পিডিএফ নোট ও বই</li>
-                <li>অনুশীলনী ও কুইজ</li>
-                <li>সার্টিফিকেট (কোর্স সম্পূর্ণ করার পর)</li>
-              </ul>
-            </div>
-            
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${process.env.FRONTEND_URL || "https://your-course-website.com"}/courses/${courseName.toLowerCase().replace(/\s+/g, "-")}" 
-                 style="display: inline-block; background: #059669; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
-                কোর্স শুরু করুন
-              </a>
-            </div>
-            
-            <div style="border-top: 1px solid #e5e7eb; padding-top: 20px; margin-top: 30px;">
-              <p style="color: #6b7280; font-size: 14px; text-align: center; margin: 0;">
-                কোনো সমস্যা হলে আমাদের সাথে যোগাযোগ করুন: <a href="mailto:${process.env.EMAIL_USER}" style="color: #2563eb;">${process.env.EMAIL_USER}</a>
-              </p>
-            </div>
-            
-            <div style="text-align: center; margin-top: 20px;">
-              <p style="color: #6b7280; margin: 0;">
-                ধন্যবাদ,<br>
-                <strong style="color: #374151;">তালিমুল ইসলাম একাডেমি টিম</strong>
-              </p>
-            </div>
-          </div>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #4caf50;">🎉 অভিনন্দন!</h2>
+          <p>প্রিয় ${name},</p>
+          <p>আপনার পেমেন্ট সফলভাবে অনুমোদিত হয়েছে এবং <strong>"${courseName}"</strong> কোর্সে আপনার অ্যাক্সেস চালু করা হয়েছে।</p>
+          <p>এখন আপনি সমস্ত ভিডিও, নোট এবং অন্যান্য কন্টেন্ট দেখতে পারবেন।</p>
+          <p style="margin-top: 20px;">
+            <a href="https://your-course-website.com/practical-ibarat" 
+               style="background: #4caf50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px;">
+              কোর্স শুরু করুন
+            </a>
+          </p>
+          <p style="margin-top: 20px; color: #666;">
+            ধন্যবাদ,<br>
+            তালিমুল ইসলাম একাডেমি টিম
+          </p>
         </div>
       `,
     }
 
     await transporter.sendMail(mailOptions)
-    console.log(`Enhanced course access email sent to ${email}`)
+    console.log(`Course access email sent to ${email}`)
   } catch (error) {
     console.error("Error sending course access email:", error)
     throw error
   }
 }
 
-// Enhanced WebSocket connection
+// WebSocket কানেকশন
 io.on("connection", (socket) => {
-  console.log("A user connected:", socket.id)
-
-  socket.on("joinAdminRoom", () => {
-    socket.join("admin")
-    console.log("Admin joined room")
-  })
-
-  socket.on("joinUserRoom", (email) => {
-    socket.join(`user_${email}`)
-    console.log(`User ${email} joined room`)
-  })
-
+  console.log("A user connected")
   socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id)
+    console.log("A user disconnected")
   })
 })
 
 // সার্ভার শুরু করুন
 const PORT = process.env.PORT || 5000
-server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`)
-  console.log(`📊 Database: MongoDB Connected`)
-  console.log(`🔌 WebSocket: Socket.IO Ready`)
-})
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`))
