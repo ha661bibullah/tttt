@@ -2321,7 +2321,7 @@
 async function sendOTP(email, otp) {
     showLoading();
     try {
-        const response = await fetch('https://tia-copy.onrender.com/api/send-otp', {
+        const response = await fetch('https://tttt-tbz0.onrender.com/api/send-otp', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -2350,7 +2350,7 @@ async function sendOTP(email, otp) {
 async function verifyOTP(email, otp) {
     showLoading();
     try {
-        const response = await fetch('https://tia-copy.onrender.com/api/verify-otp', {
+        const response = await fetch('https://tttt-tbz0.onrender.com/api/verify-otp', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -5794,7 +5794,7 @@ document.getElementById('manualPaymentForm').addEventListener('submit', async fu
     };
 
     try {
-        const response = await fetch('https://tia-copy.onrender.com/api/payments', {
+        const response = await fetch('https://tttt-tbz0.onrender.com/api/payments', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -6664,7 +6664,7 @@ window.addEventListener('DOMContentLoaded', function() {
 // Listen for course access updates
 // ক্লায়েন্ট সাইড (Practical-Ibarat.html)
 if (typeof io !== 'undefined') {
-    const socket = io('https://tia-copy.onrender.com');
+    const socket = io('https://tttt-tbz0.onrender.com');
 
     socket.on('courseAccessUpdated', (data) => {
         const user = JSON.parse(localStorage.getItem('currentUser'));
@@ -6741,7 +6741,7 @@ function showErrorMessage(message) {
 function setupCourseAccessListener() {
     // WebSocket connection
     if (typeof io !== 'undefined') {
-        const socket = io('https://tia-copy.onrender.com');
+        const socket = io('https://tttt-tbz0.onrender.comm');
         
         socket.on('courseAccessUpdated', (data) => {
             const user = JSON.parse(localStorage.getItem('currentUser'));
@@ -6807,7 +6807,7 @@ function setupCourseAccessListener() {
         // Initialize Socket.IO connection
         function initializeSocket() {
             try {
-                socket = io('https://tia-copy.onrender.com', {
+                socket = io('https://tttt-tbz0.onrender.com', {
                     transports: ['websocket', 'polling'],
                     timeout: 20000,
                     reconnection: true,
@@ -6857,7 +6857,7 @@ function setupCourseAccessListener() {
 
             try {
                 // Check user's courses from server
-                const response = await fetch(`https://tia-copy.onrender.com/api/users/${currentUser.email}/courses`);
+                const response = await fetch(`https://tttt-tbz0.onrender.com/api/users/${currentUser.email}/courses`);
                 
                 if (!response.ok) {
                     throw new Error('Failed to fetch user courses');
