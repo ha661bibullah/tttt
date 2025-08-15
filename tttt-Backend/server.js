@@ -424,35 +424,43 @@ app.post("/api/users/:email/progress", async (req, res) => {
   }
 })
 
-// OTP রাউটস (Enhanced)
+// OTP রাউটস (Clean & Enhanced)
 app.post("/api/send-otp", async (req, res) => {
   try {
-    const { email, otp } = req.body
+    const { email } = req.body;
 
-    console.log("OTP Send Request:", { email, sentOTP: otp, otpType: typeof otp })
-
+    // Check email presence
     if (!email) {
-      return res.status(400).json({ success: false, message: "ইমেইল প্রয়োজন" })
+      return res.status(400).json({
+        success: false,
+        message: "ইমেইল প্রয়োজন",
+      });
     }
 
-    let finalOTP = otp
-    if (!finalOTP) {
-      finalOTP = Math.floor(1000 + Math.random() * 9000).toString()
-    }
+    // Generate a 4-digit OTP
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
 
-    finalOTP = String(finalOTP).trim()
-    if (!/^\d{4}$/.test(finalOTP)) {
-      finalOTP = Math.floor(1000 + Math.random() * 9000).toString()
-    }
+    // Save OTP to database (User model)
+    await User.findOneAndUpdate(
+      { email: email.toLowerCase().trim() },
+      {
+        otp: otp,
+        otpExpires: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes from now
+        lastOtpSent: new Date(),
+      },
+      { upsert: true, new: true }
+    );
 
+    // Configure nodemailer
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
-    })
+    });
 
+    // Prepare mail options
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: email,
@@ -463,104 +471,119 @@ app.post("/api/send-otp", async (req, res) => {
           <div style="background: #f8fafc; padding: 20px; border-radius: 8px; text-align: center;">
             <h3 style="color: #1e293b;">আপনার OTP কোড</h3>
             <div style="font-size: 32px; font-weight: bold; color: #059669; letter-spacing: 4px; margin: 20px 0;">
-              ${finalOTP}
+              ${otp}
             </div>
             <p style="color: #64748b;">এই কোডটি ৫ মিনিটের জন্য বৈধ</p>
           </div>
         </div>
       `,
-    }
+    };
 
-    await transporter.sendMail(mailOptions)
+    // Send email
+    await transporter.sendMail(mailOptions);
 
-    await User.findOneAndUpdate(
-      { email: email.toLowerCase().trim() },
-      {
-        otp: finalOTP,
-        otpExpires: Date.now() + 300000, // 5 minutes
-        lastOtpSent: new Date(),
-      },
-      { upsert: true, new: true },
-    )
-
-    console.log("OTP sent successfully:", { email, otp: finalOTP })
-
-    res.json({ success: true, message: "OTP সফলভাবে পাঠানো হয়েছে" })
+    // Respond success
+    res.json({
+      success: true,
+      message: "OTP সফলভাবে পাঠানো হয়েছে",
+      otp, // Optional: Only for testing, remove in production
+    });
   } catch (error) {
-    console.error("Error sending OTP:", error)
-    res.status(500).json({ success: false, message: "OTP পাঠাতে সমস্যা হয়েছে" })
+    console.error("Error sending OTP:", error);
+    res.status(500).json({
+      success: false,
+      message: "OTP পাঠাতে সমস্যা হয়েছে",
+    });
   }
-})
+});
+
+
+
 
 app.post("/api/verify-otp", async (req, res) => {
   try {
-    const { email, otp } = req.body
+    const { email, otp } = req.body;
 
-    console.log("OTP Verification Request:", { email, receivedOTP: otp, otpType: typeof otp })
-
+    // Enhanced validation
     if (!email || !otp) {
-      return res.status(400).json({ success: false, message: "ইমেইল এবং OTP প্রয়োজন" })
+      return res.status(400).json({ 
+        success: false, 
+        message: "ইমেইল এবং OTP প্রয়োজন" 
+      });
     }
 
-    const cleanOTP = String(otp).trim()
-
-    if (!/^\d{4}$/.test(cleanOTP)) {
-      return res.status(400).json({ success: false, message: "অবৈধ OTP ফর্ম্যাট" })
+    // Clean and validate OTP format
+    const cleanOTP = String(otp).trim().replace(/\D/g, '');
+    if (cleanOTP.length !== 4) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "অবৈধ OTP ফর্ম্যাট - ৪ সংখ্যার OTP প্রয়োজন" 
+      });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() })
+    // Find user with case-insensitive email
+    const user = await User.findOne({ 
+      email: { $regex: new RegExp(email, 'i') } 
+    });
 
     if (!user) {
-      console.log("User not found for email:", email)
-      return res.status(400).json({ success: false, message: "ব্যবহারকারী পাওয়া যায়নি" })
+      console.log("User not found for email:", email);
+      return res.status(400).json({ 
+        success: false, 
+        message: "ব্যবহারকারী পাওয়া যায়নি" 
+      });
     }
 
-    console.log("User found:", {
-      email: user.email,
-      storedOTP: user.otp,
-      storedOTPType: typeof user.otp,
-      otpExpires: user.otpExpires,
-      currentTime: Date.now(),
-    })
-
+    // Check if OTP exists and is not expired
     if (!user.otp) {
-      return res.status(400).json({ success: false, message: "কোনো OTP পাওয়া যায়নি। নতুন OTP চান।" })
+      return res.status(400).json({ 
+        success: false, 
+        message: "কোনো OTP পাওয়া যায়নি। নতুন OTP চান।" 
+      });
     }
 
     if (user.otpExpires && user.otpExpires < Date.now()) {
       // Clear expired OTP
-      user.otp = undefined
-      user.otpExpires = undefined
-      await user.save()
-      return res.status(400).json({ success: false, message: "OTP এর মেয়াদ শেষ হয়ে গেছে। নতুন OTP চান।" })
+      user.otp = undefined;
+      user.otpExpires = undefined;
+      await user.save();
+      return res.status(400).json({ 
+        success: false, 
+        message: "OTP এর মেয়াদ শেষ হয়ে গেছে। নতুন OTP চান।" 
+      });
     }
 
-    const storedOTP = String(user.otp).trim()
-
-    console.log("OTP Comparison:", {
-      cleanOTP,
-      storedOTP,
-      match: cleanOTP === storedOTP,
-    })
-
+    // Compare OTPs after ensuring same type and format
+    const storedOTP = String(user.otp).trim().replace(/\D/g, '');
+    
     if (storedOTP !== cleanOTP) {
-      return res.status(400).json({ success: false, message: "অবৈধ OTP" })
+      return res.status(400).json({ 
+        success: false, 
+        message: "অবৈধ OTP" 
+      });
     }
 
-    user.otp = undefined
-    user.otpExpires = undefined
-    user.emailVerified = true
-    user.lastLogin = new Date()
-    await user.save()
+    // Verification successful - update user
+    user.otp = undefined;
+    user.otpExpires = undefined;
+    user.emailVerified = true;
+    user.lastLogin = new Date();
+    await user.save();
 
-    console.log("OTP verification successful for:", email)
+    console.log("OTP verification successful for:", email);
 
-    res.json({ success: true, message: "OTP সফলভাবে যাচাই হয়েছে" })
+    res.json({ 
+      success: true, 
+      message: "OTP সফলভাবে যাচাই হয়েছে" 
+    });
   } catch (error) {
-    console.error("Error verifying OTP:", error)
-    res.status(500).json({ success: false, message: "OTP যাচাই করতে সমস্যা হয়েছে" })
+    console.error("Error verifying OTP:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "OTP যাচাই করতে সমস্যা হয়েছে" 
+    });
   }
-})
+});
 
 // Enhanced Payment Routes
 app.post("/api/payments", validatePayment, async (req, res) => {

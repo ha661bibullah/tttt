@@ -2348,32 +2348,33 @@ async function sendOTP(email, otp) {
 // OTP ভ্যালিডেট করুন
         // OTP ভেরিফিকেশন ফাংশন আপডেট করুন
 async function verifyOTP(email, otp) {
-    showLoading();
-    try {
-        const response = await fetch('https://tttt-tbz0.onrender.com/api/verify-otp', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ email, otp })
-        });
+  try {
+    const response = await fetch('https://tttt-tbz0.onrender.com/api/verify-otp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ 
+        email: email.trim().toLowerCase(),
+        otp: otp.toString().trim() 
+      })
+    });
 
-        const result = await response.json();
-        
-        if (!response.ok) {
-            throw new Error(result.message || 'OTP যাচাই করতে সমস্যা হয়েছে');
-        }
-
-        return result.success;
-    } catch (error) {
-        console.error('Error verifying OTP:', error);
-        showNotification('error', error.message || 'OTP যাচাই করতে সমস্যা হয়েছে');
-        return false;
-    } finally {
-        hideLoading();
+    const result = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(result.message || 'OTP verification failed');
     }
-}
-        
+
+    return result.success;
+  } catch (error) {
+    console.error('Error verifying OTP:', error);
+    showNotification(error.message || 'OTP verification failed', 'error');
+    return false;
+  }
+}   
+
+
 
 // ইউজার রেজিস্টার করুন
         async function registerUser(name, email, password) {
@@ -2591,7 +2592,9 @@ async function verifyOTP(email, otp) {
     const otp3 = document.getElementById('otp3').value.trim();
     const otp4 = document.getElementById('otp4').value.trim();
     
-    const otp = otp1 + otp2 + otp3 + otp4;
+    // When submitting OTP
+const otp = `${otp1}${otp2}${otp3}${otp4}`;
+const response = await verifyOTP(email, otp);
     
     if (otp.length !== 4) {
         showError('otpError', 'অনুগ্রহ করে ৪টি সংখ্যা দিন');
