@@ -101,6 +101,50 @@ app.get("/api/users/:email/courses", async (req, res) => {
   }
 })
 
+// Password reset route
+app.post('/api/reset-password', async (req, res) => {
+    try {
+        const { email, newPassword } = req.body;
+        
+        // Hash the new password
+        const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+        
+        // Update user's password
+        const user = await User.findOneAndUpdate(
+            { email },
+            { password: hashedPassword },
+            { new: true }
+        );
+        
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        
+        res.json({ success: true, message: 'Password reset successfully' });
+    } catch (error) {
+        console.error('Password reset error:', error);
+        res.status(500).json({ message: 'Password reset failed' });
+    }
+});
+
+// User courses route
+app.get('/api/users/:userId/courses', async (req, res) => {
+    try {
+        const user = await User.findById(req.params.userId);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        
+        // Get full course details
+        const courses = await Course.find({ _id: { $in: user.courses } });
+        
+        res.json({ courses });
+    } catch (error) {
+        console.error('Error fetching user courses:', error);
+        res.status(500).json({ message: 'Error fetching user courses' });
+    }
+});
+
 // OTP রাউটস
 app.post("/api/send-otp", async (req, res) => {
   try {
@@ -294,14 +338,6 @@ app.put("/api/admin/payments/:id", async (req, res) => {
       error: error.message,
     })
   }
-})
-
-// server.js-তে নোটিফিকেশন ইভেন্ট যোগ করুন
-io.on("connection", (socket) => {
-  console.log("A user connected")
-  socket.on("disconnect", () => {
-    console.log("A user disconnected")
-  })
 })
 
 // কোর্স রাউটস

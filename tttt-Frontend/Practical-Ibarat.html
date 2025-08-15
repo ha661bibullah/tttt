@@ -2376,131 +2376,151 @@ async function verifyOTP(email, otp) {
         
 
 // ইউজার রেজিস্টার করুন
-        async function registerUser(name, email, password) {
-            showLoading();
-            try {
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                
-                const user = {
-                    id: Date.now().toString(),
-                    name,
-                    email,
-                    password,
-                    courses: []
-                };
-                
-                localUsers.push(user);
-                localStorage.setItem('localUsers', JSON.stringify(localUsers));
-                
-                showNotification('রেজিস্ট্রেশন সফল হয়েছে!', 'success');
-                document.getElementById('registrationSuccess').style.display = 'block';
-                return true;
-            } catch (error) {
-                console.error('Registration error:', error);
-                showNotification('রেজিস্ট্রেশনে সমস্যা হয়েছে', 'error');
-                return false;
-            } finally {
-                hideLoading();
-            }
-        }
+       // Registration function update
+async function registerUser(name, email, password) {
+    showLoading();
+    try {
+        const response = await fetch('https://tttt-tbz0.onrender.com/api/register', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                name: name,
+                email: email,
+                password: password
+            })
+        });
+
+        const result = await response.json();
         
-        // লগইন ইউজার
-         async function loginUser(email, password) {
-        showLoading();
-        try {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            const user = localUsers.find(u => u.email === email && u.password === password);
-            
-            if (user) {
-                const token = `simulated-token-${Date.now()}`;
-                
-                localStorage.setItem('authToken', token);
-                localStorage.setItem('currentUser', JSON.stringify(user));
-                
-                checkLoginStatus();
-                
-                // লগইন সফল হলে কোর্স স্ট্যাটাস চেক করুন
-                checkCourseAccess();
-                
-                document.querySelector('.login-popup').classList.remove('active');
-                document.querySelector('.blur-overlay').classList.remove('active');
-                
-                showNotification('সফলভাবে লগইন করা হয়েছে!', 'success');
-                return true;
-            } else {
-                showNotification('ভুল ইমেইল বা পাসওয়ার্ড', 'error');
-                return false;
-            }
-        } catch (error) {
-            console.error('Login error:', error);
-            showNotification('লগইনে সমস্যা হয়েছে', 'error');
-            return false;
-        } finally {
-            hideLoading();
+        if (!response.ok) {
+            throw new Error(result.message || 'রেজিস্ট্রেশনে সমস্যা হয়েছে');
         }
+
+        // Store token and user data locally
+        localStorage.setItem('authToken', result.token);
+        localStorage.setItem('currentUser', JSON.stringify(result.user));
+        
+        showNotification('রেজিস্ট্রেশন সফল হয়েছে!', 'success');
+        document.getElementById('registrationSuccess').style.display = 'block';
+        return true;
+    } catch (error) {
+        console.error('Registration error:', error);
+        showNotification(error.message || 'রেজিস্ট্রেশনে সমস্যা হয়েছে', 'error');
+        return false;
+    } finally {
+        hideLoading();
     }
+}
+        // লগইন ইউজার
+        // Login function update
+async function loginUser(email, password) {
+    showLoading();
+    try {
+        const response = await fetch('https://tttt-tbz0.onrender.com/api/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                email: email,
+                password: password
+            })
+        });
+
+        const result = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(result.message || 'লগইনে সমস্যা হয়েছে');
+        }
+
+        // Store token and user data locally
+        localStorage.setItem('authToken', result.token);
+        localStorage.setItem('currentUser', JSON.stringify(result.user));
+        
+        checkLoginStatus();
+        checkCourseAccess();
+        
+        document.querySelector('.login-popup').classList.remove('active');
+        document.querySelector('.blur-overlay').classList.remove('active');
+        
+        showNotification('সফলভাবে লগইন করা হয়েছে!', 'success');
+        return true;
+    } catch (error) {
+        console.error('Login error:', error);
+        showNotification(error.message || 'লগইনে সমস্যা হয়েছে', 'error');
+        return false;
+    } finally {
+        hideLoading();
+    }
+}
 
         // পাসওয়ার্ড রিসেট করুন
-        async function resetPassword(email, newPassword) {
-            showLoading();
-            try {
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                
-                const userIndex = localUsers.findIndex(u => u.email === email);
-                
-                if (userIndex !== -1) {
-                    localUsers[userIndex].password = newPassword;
-                    localStorage.setItem('localUsers', JSON.stringify(localUsers));
-                    
-                    showNotification('পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!', 'success');
-                    openPasswordResetSuccessModal();
-                    return true;
-                } else {
-                    showNotification('ইমেইল খুঁজে পাওয়া যায়নি', 'error');
-                    return false;
-                }
-            } catch (error) {
-                console.error('Password reset error:', error);
-                showNotification('পাসওয়ার্ড পরিবর্তনে সমস্যা হয়েছে', 'error');
-                return false;
-            } finally {
-                hideLoading();
-            }
-        }
+       // Password reset function update
+async function resetPassword(email, newPassword) {
+    showLoading();
+    try {
+        const response = await fetch('https://tttt-tbz0.onrender.com/api/reset-password', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                email: email,
+                newPassword: newPassword
+            })
+        });
+
+        const result = await response.json();
         
-        // লগইন স্ট্যাটাস চেক করুন
-        function checkLoginStatus() {
-            const token = localStorage.getItem('authToken');
-            const user = JSON.parse(localStorage.getItem('currentUser'));
-            
-            const desktopLoginButton = document.getElementById('desktopLoginButton');
-            const mobileLoginButton = document.getElementById('mobileLoginButton');
-            const desktopProfileDropdown = document.getElementById('desktopProfileDropdown');
-            const mobileProfileDropdown = document.getElementById('mobileProfileDropdown');
-            const desktopProfileIcon = document.getElementById('desktopProfileIcon');
-            const mobileProfileIcon = document.getElementById('mobileProfileIcon');
-            
-            if (token && user) {
-                if (desktopLoginButton) desktopLoginButton.style.display = 'none';
-                if (mobileLoginButton) mobileLoginButton.style.display = 'none';
-                
-                if (desktopProfileDropdown) {
-                    desktopProfileDropdown.style.display = 'block';
-                    desktopProfileIcon.textContent = user.name.charAt(0).toUpperCase();
-                }
-                if (mobileProfileDropdown) {
-                    mobileProfileDropdown.style.display = 'block';
-                    mobileProfileIcon.textContent = user.name.charAt(0).toUpperCase();
-                }
-            } else {
-                if (desktopLoginButton) desktopLoginButton.style.display = 'flex';
-                if (mobileLoginButton) mobileLoginButton.style.display = 'flex';
-                
-                if (desktopProfileDropdown) desktopProfileDropdown.style.display = 'none';
-                if (mobileProfileDropdown) mobileProfileDropdown.style.display = 'none';
-            }
+        if (!response.ok) {
+            throw new Error(result.message || 'পাসওয়ার্ড পরিবর্তনে সমস্যা হয়েছে');
         }
+
+        showNotification('পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!', 'success');
+        openPasswordResetSuccessModal();
+        return true;
+    } catch (error) {
+        console.error('Password reset error:', error);
+        showNotification(error.message || 'পাসওয়ার্ড পরিবর্তনে সমস্যা হয়েছে', 'error');
+        return false;
+    } finally {
+        hideLoading();
+    }
+}
+        // লগইন স্ট্যাটাস চেক করুন
+        // function checkLoginStatus() {
+        //     const token = localStorage.getItem('authToken');
+        //     const user = JSON.parse(localStorage.getItem('currentUser'));
+            
+        //     const desktopLoginButton = document.getElementById('desktopLoginButton');
+        //     const mobileLoginButton = document.getElementById('mobileLoginButton');
+        //     const desktopProfileDropdown = document.getElementById('desktopProfileDropdown');
+        //     const mobileProfileDropdown = document.getElementById('mobileProfileDropdown');
+        //     const desktopProfileIcon = document.getElementById('desktopProfileIcon');
+        //     const mobileProfileIcon = document.getElementById('mobileProfileIcon');
+            
+        //     if (token && user) {
+        //         if (desktopLoginButton) desktopLoginButton.style.display = 'none';
+        //         if (mobileLoginButton) mobileLoginButton.style.display = 'none';
+                
+        //         if (desktopProfileDropdown) {
+        //             desktopProfileDropdown.style.display = 'block';
+        //             desktopProfileIcon.textContent = user.name.charAt(0).toUpperCase();
+        //         }
+        //         if (mobileProfileDropdown) {
+        //             mobileProfileDropdown.style.display = 'block';
+        //             mobileProfileIcon.textContent = user.name.charAt(0).toUpperCase();
+        //         }
+        //     } else {
+        //         if (desktopLoginButton) desktopLoginButton.style.display = 'flex';
+        //         if (mobileLoginButton) mobileLoginButton.style.display = 'flex';
+                
+        //         if (desktopProfileDropdown) desktopProfileDropdown.style.display = 'none';
+        //         if (mobileProfileDropdown) mobileProfileDropdown.style.display = 'none';
+        //     }
+        // }
         
         // লগইন বাটন ক্লিক হ্যান্ডলার
         const handleLogin = () => {
@@ -5641,7 +5661,6 @@ function checkLoginStatus() {
     const token = localStorage.getItem('authToken');
     const user = JSON.parse(localStorage.getItem('currentUser'));
     
-    // UI আপডেট
     const desktopLoginButton = document.getElementById('desktopLoginButton');
     const mobileLoginButton = document.getElementById('mobileLoginButton');
     const desktopProfileDropdown = document.getElementById('desktopProfileDropdown');
@@ -5668,10 +5687,7 @@ function checkLoginStatus() {
         if (desktopProfileDropdown) desktopProfileDropdown.style.display = 'none';
         if (mobileProfileDropdown) mobileProfileDropdown.style.display = 'none';
     }
-    
-    return !!token && !!user; // বুলিয়ান ভ্যালু রিটার্ন করবে
 }
-
 // "এখনই কিনুন" বাটনের ফাংশন (আপডেটেড)
 function handleBuyNow() {
     // প্রথমে চেক করুন ইউজার লগইন করা আছে কিনা
