@@ -397,28 +397,62 @@ app.post("/api/send-otp", async (req, res) => {
   }
 });
 
+// In your OTP verification endpoint
 app.post("/api/verify-otp", async (req, res) => {
   try {
     const { email, otp } = req.body;
 
+    // Input validation
+    if (!email || !otp) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "ইমেইল এবং OTP প্রদান করা বাধ্যতামূলক" 
+      });
+    }
+
+    // Find user by email
     const user = await User.findOne({ email });
 
-    if (!user || user.otp !== otp) {
-      return res.status(400).json({ success: false, message: "অবৈধ OTP" });
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "এই ইমেইলে কোনো ব্যবহারকারী খুঁজে পাওয়া যায়নি" 
+      });
     }
 
-    if (user.otpExpires < Date.now()) {
-      return res.status(400).json({ success: false, message: "OTP এর মেয়াদ শেষ হয়ে গেছে" });
+    // Check if OTP exists and matches
+    if (!user.otp || user.otp !== otp.toString()) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "অবৈধ OTP কোড" 
+      });
     }
 
+    // Check if OTP has expired
+    if (user.otpExpires && user.otpExpires < Date.now()) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "OTP কোডের মেয়াদ শেষ হয়ে গেছে" 
+      });
+    }
+
+    // Clear OTP fields after successful verification
     user.otp = undefined;
     user.otpExpires = undefined;
     await user.save();
 
-    res.json({ success: true });
+    res.json({ 
+      success: true,
+      message: "OTP সফলভাবে যাচাই করা হয়েছে" 
+    });
+
   } catch (error) {
-    console.error("Error verifying OTP:", error);
-    res.status(500).json({ success: false, message: "OTP যাচাই করতে সমস্যা হয়েছে" });
+    console.error("OTP যাচাই ত্রুটি:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "OTP যাচাই করতে সমস্যা হয়েছে",
+      error: error.message 
+    });
   }
 });
 

@@ -2199,12 +2199,14 @@
         
         // লোডিং দেখান
         function showLoading() {
-            if (!document.getElementById('pageLoader')) {
-                createLoader();
-            }
-            document.getElementById('pageLoader').style.display = 'flex';
-        }
-        
+    document.getElementById('otpSubmitBtn').disabled = true;
+    document.getElementById('otpSubmitBtn').innerHTML = '<i class="fas fa-spinner fa-spin"></i> যাচাই করা হচ্ছে...';
+}
+
+function hideLoading() {
+    document.getElementById('otpSubmitBtn').disabled = false;
+    document.getElementById('otpSubmitBtn').innerHTML = 'যাচাই করুন';
+}
         // লোডিং লুকান
         function hideLoading() {
             const loader = document.getElementById('pageLoader');
@@ -2215,11 +2217,15 @@
         
         // এরর দেখান
         function showError(elementId, message) {
-            const errorElement = document.getElementById(elementId);
-            errorElement.textContent = message;
-            errorElement.classList.add('show-error');
-        }
-        
+    const errorElement = document.getElementById(elementId);
+    errorElement.textContent = message;
+    errorElement.classList.add('show-error');
+}
+
+function hideError(elementId) {
+    const errorElement = document.getElementById(elementId);
+    errorElement.classList.remove('show-error');
+}
         // এরর লুকান
         function hideError(elementId) {
             document.getElementById(elementId).classList.remove('show-error');
@@ -2608,10 +2614,11 @@ async function resetPassword(email, newPassword) {
             });
             
             // OTP ভেরিফিকেশন ফর্ম সাবমিশন
-           document.getElementById('otpVerificationForm').addEventListener('submit', async function(e) {
+           // In your frontend JavaScript
+document.getElementById('otpVerificationForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     
-    // OTP ইনপুট থেকে মান সংগ্রহ করুন
+    // Collect OTP digits
     const otp1 = document.getElementById('otp1').value;
     const otp2 = document.getElementById('otp2').value;
     const otp3 = document.getElementById('otp3').value;
@@ -2619,7 +2626,7 @@ async function resetPassword(email, newPassword) {
     
     const otp = otp1 + otp2 + otp3 + otp4;
     
-    // OTP ভ্যালিডেশন
+    // OTP validation
     if (otp.length !== 4 || !/^\d+$/.test(otp)) {
         showError('otpError', 'অনুগ্রহ করে সঠিক ৪ সংখ্যার অটিপি দিন');
         return;
@@ -2628,24 +2635,40 @@ async function resetPassword(email, newPassword) {
     hideError('otpError');
     
     try {
-        const verified = await verifyOTP(currentUserEmail, otp);
+        showLoading();
         
-        if (verified) {
-            // OTP সঠিক হলে পরবর্তী স্টেপে যান
-            if (resetPasswordEmail) {
-                toggleForm('resetPassword');
-            } else {
-                toggleForm('signup');
-            }
-        } else {
-            showError('otpError', 'অটিপি মিলছে না, আবার চেষ্টা করুন');
+        const response = await fetch('https://tttt-tbz0.onrender.com/api/verify-otp', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                email: currentUserEmail,
+                otp: otp
+            })
+        });
+
+        const result = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(result.message || 'OTP যাচাই করতে সমস্যা হয়েছে');
         }
+
+        // OTP verified successfully
+        if (resetPasswordEmail) {
+            toggleForm('resetPassword');
+        } else {
+            toggleForm('signup');
+        }
+        
     } catch (error) {
         console.error('OTP verification error:', error);
-        showError('otpError', 'অটিপি যাচাই করতে সমস্যা হয়েছে');
+        showError('otpError', error.message || 'অটিপি মিলছে না, আবার চেষ্টা করুন');
+    } finally {
+        hideLoading();
     }
 });
-            // সাইনআপ ফর্ম সাবমিশন
+// সাইনআপ ফর্ম সাবমিশন
            document.getElementById('signupForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     
@@ -2854,6 +2877,7 @@ document.getElementById('mobileDropdownContent').addEventListener('click', funct
             
             // OTP ইনপুট অটো-ফোকাস ফাংশনালিটি
             // OTP ইনপুট ফিল্ডে অটো ফোকাস এবং নেভিগেশন
+// Auto-focus and navigation between OTP input fields
 const otpInputs = document.querySelectorAll('.otp-digit');
 otpInputs.forEach((input, index) => {
     input.addEventListener('input', function(e) {
@@ -2871,8 +2895,8 @@ otpInputs.forEach((input, index) => {
             }
         }
     });
-});
-            // মডাল বাটন ইভেন্ট হ্যান্ডলার
+});        
+// মডাল বাটন ইভেন্ট হ্যান্ডলার
             document.getElementById('autoLoginButton').addEventListener('click', function() {
                 closeModal();
                 toggleForm('login');
