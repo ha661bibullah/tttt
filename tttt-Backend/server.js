@@ -103,35 +103,71 @@ app.get("/api/users/:email/courses", async (req, res) => {
 
 // OTP রাউটস
 app.post("/api/send-otp", async (req, res) => {
-    try {
-        const { email } = req.body;
-        
-        // Generate 4-digit OTP
-        const otp = Math.floor(1000 + Math.random() * 9000).toString();
-        const otpExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes expiry
+  try {
+    const { email } = req.body;
 
-        // Save OTP to user or create new user if not exists
-        await User.findOneAndUpdate(
-            { email },
-            { otp, otpExpires },
-            { upsert: true, new: true }
-        );
-
-        // In production, you would send this via email/SMS
-        console.log(`OTP for ${email}: ${otp}`);
-
-        res.json({
-            success: true,
-            message: "OTP সফলভাবে পাঠানো হয়েছে"
-        });
-
-    } catch (error) {
-        console.error("Error sending OTP:", error);
-        res.status(500).json({
-            success: false,
-            message: "OTP পাঠাতে সমস্যা হয়েছে"
-        });
+    // Validate email format
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "দয়া করে একটি বৈধ ইমেইল ঠিকানা প্রদান করুন"
+      });
     }
+
+    // Generate 4-digit OTP
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    const otpExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes expiry
+
+    // Save OTP to user or create new user if not exists
+    await User.findOneAndUpdate(
+      { email },
+      { otp, otpExpires },
+      { upsert: true, new: true }
+    );
+
+    // Configure email transporter
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    // Email content
+    const mailOptions = {
+      from: `Talimul Islam Academy <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "আপনার ওটিপি কোড - Talimul Islam Academy",
+      text: `আপনার ওটিপি কোড হল: ${otp}\nএই কোড ৫ মিনিটের মধ্যে মেয়াদ উত্তীর্ণ হবে।`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #2c3e50;">Talimul Islam Academy</h2>
+          <p>আপনার ওটিপি কোড নিচে দেওয়া হল:</p>
+          <div style="background: #f4f4f4; padding: 10px; margin: 10px 0; font-size: 24px; font-weight: bold; letter-spacing: 2px; text-align: center;">
+            ${otp}
+          </div>
+          <p style="color: #e74c3c;">এই কোড ৫ মিনিটের মধ্যে মেয়াদ উত্তীর্ণ হবে।</p>
+          <p>ধন্যবাদান্তে,<br/>Talimul Islam Academy টিম</p>
+        </div>
+      `,
+    };
+
+    // Send email
+    await transporter.sendMail(mailOptions);
+
+    res.json({
+      success: true,
+      message: "ওটিপি সফলভাবে পাঠানো হয়েছে"
+    });
+
+  } catch (error) {
+    console.error("Error sending OTP:", error);
+    res.status(500).json({
+      success: false,
+      message: "ওটিপি পাঠাতে সমস্যা হয়েছে"
+    });
+  }
 });
 
 
