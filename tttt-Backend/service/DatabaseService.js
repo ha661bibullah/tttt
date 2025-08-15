@@ -1,9 +1,9 @@
-const User = require('./models/User');
+const User = require("../models/User")
 const Course = require("../models/Course")
 const Payment = require("../models/Payment")
 const Progress = require("../models/Progress")
 const Review = require("../models/Review")
-const Notification = require("../models/Notification")
+const Notification = require("./models/Notification")
 
 class DatabaseService {
   // ===== USER OPERATIONS =====
