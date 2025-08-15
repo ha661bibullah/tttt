@@ -17,47 +17,27 @@ const io = new Server(server, {
   },
 })
 
-// MongoDB connection
-mongoose.connect(process.env.MONGO_URI)
+// MongoDB কানেকশন
+mongoose
+  .connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB Connected"))
   .catch((err) => console.error("MongoDB Connection Error:", err))
 
-// User model with enhanced validation
-const UserSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  email: { 
-    type: String, 
-    required: true, 
-    unique: true,
-    validate: {
-      validator: function(v) {
-        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
-      },
-      message: props => `${props.value} is not a valid email address!`
-    }
-  },
-  password: { type: String, required: true, minlength: 6 },
-  courses: [String],
-  otp: String,
-  otpExpires: Date,
-  resetToken: String,
-  resetTokenExpires: Date,
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
-})
+// মডেল ডিফাইন
+const User = mongoose.model(
+  "User",
+  new mongoose.Schema({
+    name: String,
+    email: { type: String, unique: true },
+    password: String,
+    courses: [String],
+    otp: String,
+    otpExpires: Date,
+    resetToken: String,
+    resetTokenExpires: Date,
+  }),
+)
 
-// Add pre-save hook for password hashing
-UserSchema.pre('save', async function(next) {
-  if (this.isModified('password')) {
-    this.password = await bcrypt.hash(this.password, 10)
-  }
-  this.updatedAt = Date.now()
-  next()
-})
-
-const User = mongoose.model("User", UserSchema)
-
-// Payment model
 const Payment = mongoose.model(
   "Payment",
   new mongoose.Schema({
@@ -72,10 +52,9 @@ const Payment = mongoose.model(
     amount: Number,
     status: { type: String, default: "pending" },
     date: { type: Date, default: Date.now },
-  })
+  }),
 )
 
-// Course model
 const Course = mongoose.model(
   "Course",
   new mongoose.Schema({
@@ -86,60 +65,48 @@ const Course = mongoose.model(
     duration: String,
     instructor: String,
     createdAt: { type: Date, default: Date.now },
-  })
+  }),
 )
 
-// Middleware
+// মিডলওয়্যার
 app.use(cors())
 app.use(express.json())
 
-// JWT verification middleware
-const authenticateJWT = (req, res, next) => {
-  const authHeader = req.headers.authorization
-  
-  if (authHeader) {
-    const token = authHeader.split(' ')[1]
-    
-    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-      if (err) {
-        return res.sendStatus(403)
-      }
-      
-      req.user = user
-      next()
-    })
-  } else {
-    res.sendStatus(401)
+// ====== নতুন পেমেন্ট ভ্যালিডেশন মিডলওয়্যার ======
+const validatePayment = (req, res, next) => {
+  const { name, email, phone, courseId, paymentMethod, txnId, amount } = req.body
+
+  if (!name || !email || !phone || !courseId || !paymentMethod || !txnId || !amount) {
+    return res.status(400).json({ message: "সমস্ত প্রয়োজনীয় ফিল্ড পূরণ করুন" })
   }
+
+  if (!["bkash", "nagad", "bank", "card"].includes(paymentMethod)) {
+    return res.status(400).json({ message: "অবৈধ পেমেন্ট মাধ্যম" })
+  }
+
+  next()
 }
 
-// OTP routes
+// ======= নতুন রাউট =======
+app.get("/api/users/:email/courses", async (req, res) => {
+  try {
+    const user = await User.findOne({ email: req.params.email })
+    if (!user) {
+      return res.status(404).json({ message: "User not found" })
+    }
+    res.json({ courses: user.courses || [] })
+  } catch (error) {
+    console.error("Error fetching user courses:", error)
+    res.status(500).json({ message: "Error fetching user courses" })
+  }
+})
+
+// OTP রাউটস
 app.post("/api/send-otp", async (req, res) => {
   try {
     const { email } = req.body
-    
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({ success: false, message: "Invalid email address" })
-    }
-
     const otp = Math.floor(1000 + Math.random() * 9000).toString()
-    const otpExpires = Date.now() + 300000 // 5 minutes
 
-    // Check if user exists
-    let user = await User.findOne({ email })
-    
-    if (user) {
-      // Update existing user's OTP
-      user.otp = otp
-      user.otpExpires = otpExpires
-      await user.save()
-    } else {
-      // Create new user with OTP (temporary until full registration)
-      user = new User({ email, otp, otpExpires })
-      await user.save()
-    }
-
-    // Send OTP via email
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
@@ -153,21 +120,16 @@ app.post("/api/send-otp", async (req, res) => {
       to: email,
       subject: "তালিমুল ইসলাম একাডেমি - OTP কোড",
       text: `আপনার OTP কোড: ${otp}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #2E7D32;">OTP Verification</h2>
-          <p>আপনার OTP কোড: <strong>${otp}</strong></p>
-          <p style="color: #666;">এই কোড ৫ মিনিটের জন্য বৈধ</p>
-        </div>
-      `
     }
 
     await transporter.sendMail(mailOptions)
 
-    res.json({ success: true, message: "OTP sent successfully" })
+    await User.findOneAndUpdate({ email }, { otp, otpExpires: Date.now() + 300000 }, { upsert: true, new: true })
+
+    res.json({ success: true, message: "OTP সফলভাবে পাঠানো হয়েছে" })
   } catch (error) {
     console.error("Error sending OTP:", error)
-    res.status(500).json({ success: false, message: "Failed to send OTP" })
+    res.status(500).json({ success: false, message: "OTP পাঠাতে সমস্যা হয়েছে" })
   }
 })
 
@@ -176,135 +138,275 @@ app.post("/api/verify-otp", async (req, res) => {
     const { email, otp } = req.body
 
     const user = await User.findOne({ email })
-    
-    if (!user) {
-      return res.status(400).json({ success: false, message: "User not found" })
-    }
 
-    if (user.otp !== otp) {
-      return res.status(400).json({ success: false, message: "Invalid OTP" })
+    if (!user || user.otp !== otp) {
+      return res.status(400).json({ success: false, message: "অবৈধ OTP" })
     }
 
     if (user.otpExpires < Date.now()) {
-      return res.status(400).json({ success: false, message: "OTP has expired" })
+      return res.status(400).json({ success: false, message: "OTP এর মেয়াদ শেষ হয়ে গেছে" })
     }
 
-    // Clear OTP after successful verification
     user.otp = undefined
     user.otpExpires = undefined
     await user.save()
 
-    res.json({ success: true, message: "OTP verified successfully" })
+    res.json({ success: true })
   } catch (error) {
     console.error("Error verifying OTP:", error)
-    res.status(500).json({ success: false, message: "Failed to verify OTP" })
+    res.status(500).json({ success: false, message: "OTP যাচাই করতে সমস্যা হয়েছে" })
   }
 })
+
+// পেমেন্ট রাউটস (মিডলওয়্যার যুক্ত করা হয়েছে)
+app.post("/api/payments", validatePayment, async (req, res) => {
+  try {
+    const payment = new Payment(req.body)
+    await payment.save()
+
+    await notifyAdmin(payment._id)
+
+    res.status(201).json(payment)
+  } catch (error) {
+    console.error("Error saving payment:", error)
+    res.status(500).json({ message: "পেমেন্ট সেভ করতে সমস্যা হয়েছে" })
+  }
+})
+
+app.get("/api/admin/payments", async (req, res) => {
+  try {
+    const { status, page = 1, limit = 10, search = "" } = req.query
+
+    const query = {}
+    if (status) query.status = status
+
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { txnId: { $regex: search, $options: "i" } },
+      ]
+    }
+
+    const payments = await Payment.find(query)
+      .sort({ date: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+
+    const count = await Payment.countDocuments(query)
+
+    res.json({
+      payments,
+      totalPages: Math.ceil(count / limit),
+      currentPage: page,
+    })
+  } catch (error) {
+    console.error("Error fetching payments:", error)
+    res.status(500).json({ message: "পেমেন্ট লোড করতে সমস্যা হয়েছে" })
+  }
+})
+
+app.get("/api/admin/payments/:id", async (req, res) => {
+  try {
+    const payment = await Payment.findById(req.params.id)
+    if (!payment) {
+      return res.status(404).json({ message: "পেমেন্ট পাওয়া যায়নি" })
+    }
+    res.json(payment)
+  } catch (error) {
+    console.error("Error fetching payment:", error)
+    res.status(500).json({ message: "পেমেন্ট ডিটেইলস লোড করতে সমস্যা হয়েছে" })
+  }
+})
+
+// ✅ আপডেটেড PUT রাউট
+// Update the PUT route for payment approval
+app.put("/api/admin/payments/:id", async (req, res) => {
+  try {
+    const { status } = req.body
+
+    // Validation
+    if (!status || !["approved", "rejected", "pending"].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status value. Only approved, rejected or pending accepted",
+      })
+    }
+
+    // Update payment
+    const payment = await Payment.findByIdAndUpdate(req.params.id, { status }, { new: true })
+
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        message: "Payment not found",
+      })
+    }
+
+    console.log(`Payment ${payment._id} status updated to: ${status}`)
+
+    // If approved
+    if (status === "approved") {
+      // Update user's course access
+      const user = await User.findOneAndUpdate(
+        { email: payment.email },
+        { $addToSet: { courses: payment.courseId } },
+        { new: true, upsert: true },
+      )
+
+      console.log(`User ${payment.email} granted access to course ${payment.courseId}`)
+
+      // Send real-time notification to all connected clients
+      const notification = {
+        type: "courseAccessUpdated",
+        email: payment.email,
+        courseId: payment.courseId,
+        courseName: payment.courseName,
+        paymentId: payment._id,
+        userName: payment.name,
+        timestamp: new Date().toISOString(),
+      }
+
+      // Emit to all connected clients
+      io.emit("courseAccessUpdated", notification)
+
+      console.log("Course access notification broadcasted:", notification)
+
+      // Optional: Send email notification to user
+      try {
+        await sendCourseAccessEmail(payment.email, payment.name, payment.courseName || payment.courseId)
+      } catch (emailError) {
+        console.error("Failed to send email notification:", emailError)
+        // Don't fail the request if email fails
+      }
+    }
+
+    res.json({
+      success: true,
+      message: "Payment status updated successfully",
+      payment,
+    })
+  } catch (error) {
+    console.error("Error updating payment:", error)
+    res.status(500).json({
+      success: false,
+      message: "Error updating payment",
+      error: error.message,
+    })
+  }
+})
+
+// server.js-তে নোটিফিকেশন ইভেন্ট যোগ করুন
+io.on("connection", (socket) => {
+  console.log("A user connected")
+  socket.on("disconnect", () => {
+    console.log("A user disconnected")
+  })
+})
+
+// কোর্স রাউটস
+app.get("/api/courses", async (req, res) => {
+  try {
+    const courses = await Course.find()
+    res.json(courses)
+  } catch (error) {
+    console.error("Error fetching courses:", error)
+    res.status(500).json({ message: "কোর্স লোড করতে সমস্যা হয়েছে" })
+  }
+})
+
+// Authentication Routes
+const saltRounds = 10
 
 // Registration route
 app.post("/api/register", async (req, res) => {
-  try {
-    const { name, email, password } = req.body
+    try {
+        const { name, email, password } = req.body;
 
-    // Validate input
-    if (!name || !email || !password) {
-      return res.status(400).json({ 
-        success: false,
-        message: "All fields are required"
-      })
+        // ইমেইল ভ্যালিডেশন
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return res.status(400).json({ 
+                success: false,
+                message: "অবৈধ ইমেইল ঠিকানা"
+            });
+        }
+
+        // ইউজার এক্সিস্ট চেক
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            return res.status(400).json({ 
+                success: false,
+                message: "এই ইমেইলটি ইতিমধ্যে ব্যবহার করা হয়েছে। লগইন করুন অথবা অন্য ইমেইল ব্যবহার করুন।"
+            });
+        }
+
+        // পাসওয়ার্ড হ্যাশ
+        const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+        // নতুন ইউজার তৈরি
+        const user = new User({
+            name,
+            email,
+            password: hashedPassword,
+            courses: [],
+        });
+
+        await user.save();
+
+        // JWT টোকেন জেনারেট
+        const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { 
+            expiresIn: "1d" 
+        });
+
+        res.status(201).json({
+            success: true,
+            token,
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                courses: user.courses,
+            },
+            message: "রেজিস্ট্রেশন সফল হয়েছে!"
+        });
+
+    } catch (error) {
+        console.error("Registration error:", error);
+        
+        // MongoDB ডুপ্লিকেট কী এরর হ্যান্ডেল
+        if (error.code === 11000) {
+            return res.status(400).json({
+                success: false,
+                message: "এই ইমেইলটি ইতিমধ্যে ব্যবহার করা হয়েছে"
+            });
+        }
+        
+        res.status(500).json({
+            success: false,
+            message: "রেজিস্ট্রেশন ব্যর্থ হয়েছে",
+            error: error.message
+        });
     }
-
-    // Check if user already exists
-    const existingUser = await User.findOne({ email })
-    if (existingUser && existingUser.password) {
-      return res.status(400).json({ 
-        success: false,
-        message: "Email already registered"
-      })
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10)
-
-    // Create or update user
-    let user
-    if (existingUser) {
-      // Update existing user (who only had email/OTP before)
-      user = existingUser
-      user.name = name
-      user.password = hashedPassword
-    } else {
-      // Create new user
-      user = new User({
-        name,
-        email,
-        password: hashedPassword,
-        courses: []
-      })
-    }
-
-    await user.save()
-
-    // Generate JWT token
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { 
-      expiresIn: "1d" 
-    })
-
-    res.status(201).json({
-      success: true,
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        courses: user.courses,
-      },
-      message: "Registration successful"
-    })
-
-  } catch (error) {
-    console.error("Registration error:", error)
-    
-    if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: "Email already registered"
-      })
-    }
-    
-    res.status(500).json({
-      success: false,
-      message: "Registration failed",
-      error: error.message
-    })
-  }
-})
+});
 
 // Login route
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body
 
-    // Validate input
-    if (!email || !password) {
-      return res.status(400).json({ message: "Email and password are required" })
-    }
-
     const user = await User.findOne({ email })
     if (!user) {
       return res.status(401).json({ message: "Invalid credentials" })
     }
 
-    // Compare passwords
+    // Compare hashed password
     const isMatch = await bcrypt.compare(password, user.password)
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid credentials" })
     }
 
     // Generate JWT token
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { 
-      expiresIn: "1d" 
-    })
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1d" })
 
     res.json({
       token,
@@ -314,7 +416,6 @@ app.post("/api/login", async (req, res) => {
         email: user.email,
         courses: user.courses,
       },
-      message: "Login successful"
     })
   } catch (error) {
     console.error("Login error:", error)
@@ -322,25 +423,17 @@ app.post("/api/login", async (req, res) => {
   }
 })
 
-// Password reset routes
-app.post("/api/forgot-password", async (req, res) => {
+// হেল্পার ফাংশন
+async function notifyAdmin(paymentId) {
+  console.log(`New payment created: ${paymentId}`)
+}
+
+async function notifyUser(email, courseId) {
+  console.log(`User with email ${email} granted access to course ${courseId}`)
+}
+
+async function sendCourseAccessEmail(email, name, courseName) {
   try {
-    const { email } = req.body
-    
-    const user = await User.findOne({ email })
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' })
-    }
-    
-    // Generate reset token
-    const resetToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '15m' })
-    const resetTokenExpires = Date.now() + 900000 // 15 minutes
-    
-    user.resetToken = resetToken
-    user.resetTokenExpires = resetTokenExpires
-    await user.save()
-    
-    // Send reset email
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
@@ -349,108 +442,96 @@ app.post("/api/forgot-password", async (req, res) => {
       },
     })
 
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`
-    
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: email,
-      subject: "Password Reset Request",
+      subject: "তালিমুল ইসলাম একাডেমি - কোর্স অনুমোদিত হয়েছে",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #2E7D32;">Password Reset</h2>
-          <p>Please click the link below to reset your password:</p>
-          <a href="${resetUrl}" style="display: inline-block; background: #2E7D32; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin: 10px 0;">Reset Password</a>
-          <p style="color: #666;">This link will expire in 15 minutes.</p>
+          <h2 style="color: #4caf50;">🎉 অভিনন্দন!</h2>
+          <p>প্রিয় ${name},</p>
+          <p>আপনার পেমেন্ট সফলভাবে অনুমোদিত হয়েছে এবং <strong>"${courseName}"</strong> কোর্সে আপনার অ্যাক্সেস চালু করা হয়েছে।</p>
+          <p>এখন আপনি সমস্ত ভিডিও, নোট এবং অন্যান্য কন্টেন্ট দেখতে পারবেন।</p>
+          <p style="margin-top: 20px;">
+            <a href="https://your-course-website.com/practical-ibarat" 
+               style="background: #4caf50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px;">
+              কোর্স শুরু করুন
+            </a>
+          </p>
+          <p style="margin-top: 20px; color: #666;">
+            ধন্যবাদ,<br>
+            তালিমুল ইসলাম একাডেমি টিম
+          </p>
         </div>
-      `
+      `,
     }
 
     await transporter.sendMail(mailOptions)
-    
-    res.json({ success: true, message: 'Password reset email sent' })
+    console.log(`Course access email sent to ${email}`)
   } catch (error) {
-    console.error('Forgot password error:', error)
-    res.status(500).json({ message: 'Failed to process request' })
+    console.error("Error sending course access email:", error)
+    throw error
   }
+}
+
+// WebSocket কানেকশন
+io.on("connection", (socket) => {
+  console.log("A user connected")
+  socket.on("disconnect", () => {
+    console.log("A user disconnected")
+  })
 })
 
-app.post("/api/reset-password", async (req, res) => {
-  try {
-    const { token, newPassword } = req.body
-    
-    if (!token || !newPassword) {
-      return res.status(400).json({ message: 'Token and new password are required' })
-    }
-    
-    // Verify token
-    let decoded
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET)
-    } catch (err) {
-      return res.status(400).json({ message: 'Invalid or expired token' })
-    }
-    
-    const user = await User.findOne({ 
-      email: decoded.email,
-      resetToken: token,
-      resetTokenExpires: { $gt: Date.now() }
-    })
-    
-    if (!user) {
-      return res.status(400).json({ message: 'Invalid or expired token' })
-    }
-    
-    // Update password
-    user.password = await bcrypt.hash(newPassword, 10)
-    user.resetToken = undefined
-    user.resetTokenExpires = undefined
-    await user.save()
-    
-    res.json({ success: true, message: 'Password reset successfully' })
-  } catch (error) {
-    console.error('Password reset error:', error)
-    res.status(500).json({ message: 'Password reset failed' })
-  }
-})
-
-// Protected user routes
-app.get("/api/user", authenticateJWT, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.userId)
-    if (!user) {
-      return res.status(404).json({ message: "User not found" })
-    }
-    
-    res.json({
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      courses: user.courses
-    })
-  } catch (error) {
-    console.error("Error fetching user:", error)
-    res.status(500).json({ message: "Error fetching user data" })
-  }
-})
-
-// User courses route
-app.get("/api/user/courses", authenticateJWT, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.userId).populate('courses')
-    if (!user) {
-      return res.status(404).json({ message: "User not found" })
-    }
-    
-    res.json({ courses: user.courses || [] })
-  } catch (error) {
-    console.error("Error fetching user courses:", error)
-    res.status(500).json({ message: "Error fetching user courses" })
-  }
-})
-
-// Other existing routes (payments, courses, etc.) remain the same
-// ... [keep all the existing payment and course routes from your original code]
-
-// Start server
+// সার্ভার শুরু করুন
 const PORT = process.env.PORT || 5000
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`))
+
+
+
+
+
+// Add these routes to your server.js
+
+// Password reset route
+app.post('/api/reset-password', async (req, res) => {
+    try {
+        const { email, newPassword } = req.body;
+        
+        // Hash the new password
+        const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+        
+        // Update user's password
+        const user = await User.findOneAndUpdate(
+            { email },
+            { password: hashedPassword },
+            { new: true }
+        );
+        
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        
+        res.json({ success: true, message: 'Password reset successfully' });
+    } catch (error) {
+        console.error('Password reset error:', error);
+        res.status(500).json({ message: 'Password reset failed' });
+    }
+});
+
+// User courses route
+app.get('/api/users/:userId/courses', async (req, res) => {
+    try {
+        const user = await User.findById(req.params.userId);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        
+        // Get full course details
+        const courses = await Course.find({ _id: { $in: user.courses } });
+        
+        res.json({ courses });
+    } catch (error) {
+        console.error('Error fetching user courses:', error);
+        res.status(500).json({ message: 'Error fetching user courses' });
+    }
+});
