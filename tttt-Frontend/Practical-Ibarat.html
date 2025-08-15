@@ -2199,14 +2199,12 @@
         
         // লোডিং দেখান
         function showLoading() {
-    document.getElementById('otpSubmitBtn').disabled = true;
-    document.getElementById('otpSubmitBtn').innerHTML = '<i class="fas fa-spinner fa-spin"></i> যাচাই করা হচ্ছে...';
-}
-
-function hideLoading() {
-    document.getElementById('otpSubmitBtn').disabled = false;
-    document.getElementById('otpSubmitBtn').innerHTML = 'যাচাই করুন';
-}
+            if (!document.getElementById('pageLoader')) {
+                createLoader();
+            }
+            document.getElementById('pageLoader').style.display = 'flex';
+        }
+        
         // লোডিং লুকান
         function hideLoading() {
             const loader = document.getElementById('pageLoader');
