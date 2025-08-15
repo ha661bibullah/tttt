@@ -8,16 +8,375 @@ const { Server } = require("socket.io")
 const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
 
-const User = require("./models/User")
-const Course = require("./models/Course")
-const Payment = require("./models/Payment")
-const Progress = require("./models/Progress")
-const Review = require("./models/Review")
-const Notification = require("./models/Notification")
-const DatabaseService = require("./services/DatabaseService")
-const { validatePayment, validateUser, validateCourse } = require("./middleware/validation")
-
 dotenv.config()
+
+mongoose.connect(process.env.MONGO_URI || "mongodb://localhost:27017/talimul_islam", {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+
+mongoose.connection.on("connected", () => {
+  console.log("✅ MongoDB Connected Successfully")
+})
+
+mongoose.connection.on("error", (err) => {
+  console.error("❌ MongoDB Connection Error:", err)
+})
+
+const userSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    email: { type: String, required: true, unique: true, lowercase: true },
+    password: { type: String, required: true },
+    phone: { type: String, trim: true },
+    courses: [{ type: String }],
+    otp: { type: String },
+    otpExpires: { type: Date },
+    emailVerified: { type: Boolean, default: false },
+    registeredAt: { type: Date, default: Date.now },
+    lastLogin: { type: Date },
+    lastOtpSent: { type: Date },
+    profile: {
+      avatar: String,
+      bio: String,
+      location: String,
+      dateOfBirth: Date,
+    },
+    preferences: {
+      notifications: { type: Boolean, default: true },
+      language: { type: String, default: "bn" },
+      theme: { type: String, default: "light" },
+    },
+  },
+  { timestamps: true },
+)
+
+const courseSchema = new mongoose.Schema(
+  {
+    title: { type: String, required: true },
+    description: { type: String, required: true },
+    instructor: { type: String, required: true },
+    price: { type: Number, required: true },
+    duration: { type: String, required: true },
+    level: { type: String, enum: ["beginner", "intermediate", "advanced"], default: "beginner" },
+    category: { type: String, required: true },
+    thumbnail: { type: String },
+    curriculum: [
+      {
+        title: String,
+        duration: String,
+        videoUrl: String,
+        materials: [String],
+      },
+    ],
+    rating: { type: Number, default: 0 },
+    totalRatings: { type: Number, default: 0 },
+    enrolledStudents: { type: Number, default: 0 },
+    isActive: { type: Boolean, default: true },
+    tags: [String],
+    requirements: [String],
+    whatYouWillLearn: [String],
+  },
+  { timestamps: true },
+)
+
+const paymentSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true },
+    email: { type: String, required: true },
+    phone: { type: String, required: true },
+    courseId: { type: String, required: true },
+    courseName: { type: String },
+    amount: { type: Number, required: true },
+    paymentMethod: { type: String, required: true },
+    transactionId: { type: String, required: true },
+    screenshot: { type: String },
+    status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
+    submittedAt: { type: Date, default: Date.now },
+    processedAt: { type: Date },
+    adminNote: { type: String },
+    ipAddress: { type: String },
+    userAgent: { type: String },
+  },
+  { timestamps: true },
+)
+
+const progressSchema = new mongoose.Schema(
+  {
+    userId: { type: String, required: true },
+    courseId: { type: String, required: true },
+    completedLessons: [{ type: String }],
+    totalLessons: { type: Number, default: 0 },
+    completionPercentage: { type: Number, default: 0 },
+    timeSpent: { type: Number, default: 0 },
+    lastAccessedLesson: { type: String },
+    enrolledAt: { type: Date, default: Date.now },
+    completedAt: { type: Date },
+    certificateIssued: { type: Boolean, default: false },
+    certificateUrl: { type: String },
+    quizScores: [
+      {
+        lessonId: String,
+        score: Number,
+        maxScore: Number,
+        attemptedAt: Date,
+      },
+    ],
+  },
+  { timestamps: true },
+)
+
+const reviewSchema = new mongoose.Schema(
+  {
+    courseId: { type: String, required: true },
+    userEmail: { type: String, required: true },
+    userName: { type: String, required: true },
+    rating: { type: Number, required: true, min: 1, max: 5 },
+    comment: { type: String, required: true },
+    isApproved: { type: Boolean, default: false },
+    adminResponse: { type: String },
+    helpful: { type: Number, default: 0 },
+  },
+  { timestamps: true },
+)
+
+const notificationSchema = new mongoose.Schema(
+  {
+    type: { type: String, required: true },
+    title: { type: String, required: true },
+    message: { type: String, required: true },
+    recipient: { type: String },
+    data: { type: mongoose.Schema.Types.Mixed },
+    isRead: { type: Boolean, default: false },
+    priority: { type: String, enum: ["low", "medium", "high"], default: "medium" },
+  },
+  { timestamps: true },
+)
+
+const User = mongoose.model("User", userSchema)
+const Course = mongoose.model("Course", courseSchema)
+const Payment = mongoose.model("Payment", paymentSchema)
+const Progress = mongoose.model("Progress", progressSchema)
+const Review = mongoose.model("Review", reviewSchema)
+const Notification = mongoose.model("Notification", notificationSchema)
+
+const validateUserRegistration = (req, res, next) => {
+  const { name, email, password } = req.body
+  const errors = []
+
+  if (!name || name.trim().length < 2) {
+    errors.push("নাম কমপক্ষে ২ অক্ষরের হতে হবে")
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!email || !emailRegex.test(email)) {
+    errors.push("বৈধ ইমেইল ঠিকানা প্রয়োজন")
+  }
+
+  if (!password || password.length < 6) {
+    errors.push("পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে")
+  }
+
+  if (errors.length > 0) {
+    return res.status(400).json({ message: errors.join(", ") })
+  }
+
+  next()
+}
+
+const validatePayment = (req, res, next) => {
+  const { name, email, phone, courseId, amount, paymentMethod, transactionId } = req.body
+  const errors = []
+
+  if (!name || name.trim().length < 2) {
+    errors.push("নাম প্রয়োজন")
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!email || !emailRegex.test(email)) {
+    errors.push("বৈধ ইমেইল প্রয়োজন")
+  }
+
+  const phoneRegex = /^(\+88)?01[3-9]\d{8}$/
+  if (!phone || !phoneRegex.test(phone.replace(/\s/g, ""))) {
+    errors.push("বৈধ ফোন নম্বর প্রয়োজন")
+  }
+
+  if (!courseId) {
+    errors.push("কোর্স নির্বাচন প্রয়োজন")
+  }
+
+  if (!amount || amount <= 0) {
+    errors.push("বৈধ পরিমাণ প্রয়োজন")
+  }
+
+  if (!paymentMethod) {
+    errors.push("পেমেন্ট পদ্ধতি নির্বাচন প্রয়োজন")
+  }
+
+  if (!transactionId || transactionId.trim().length < 5) {
+    errors.push("ট্রানজেকশন আইডি প্রয়োজন")
+  }
+
+  if (errors.length > 0) {
+    return res.status(400).json({ message: errors.join(", ") })
+  }
+
+  next()
+}
+
+const validateCourse = (req, res, next) => {
+  const { title, description, instructor, price, duration } = req.body
+  const errors = []
+
+  if (!title || title.trim().length < 3) {
+    errors.push("কোর্সের শিরোনাম কমপক্ষে ৩ অক্ষরের হতে হবে")
+  }
+
+  if (!description || description.trim().length < 10) {
+    errors.push("কোর্সের বিবরণ কমপক্ষে ১০ অক্ষরের হতে হবে")
+  }
+
+  if (!instructor || instructor.trim().length < 2) {
+    errors.push("প্রশিক্ষকের নাম প্রয়োজন")
+  }
+
+  if (!price || price < 0) {
+    errors.push("বৈধ মূল্য প্রয়োজন")
+  }
+
+  if (!duration) {
+    errors.push("কোর্সের সময়কাল প্রয়োজন")
+  }
+
+  if (errors.length > 0) {
+    return res.status(400).json({ message: errors.join(", ") })
+  }
+
+  next()
+}
+
+class DatabaseService {
+  async createPayment(paymentData) {
+    const payment = new Payment(paymentData)
+    return await payment.save()
+  }
+
+  async getPayments({ status, page = 1, limit = 10, search = "" }) {
+    const query = {}
+    if (status && status !== "all") query.status = status
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { transactionId: { $regex: search, $options: "i" } },
+      ]
+    }
+
+    const payments = await Payment.find(query)
+      .sort({ submittedAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit)
+
+    const total = await Payment.countDocuments(query)
+
+    return {
+      payments,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
+      total,
+    }
+  }
+
+  async approvePayment(paymentId, status, adminNote) {
+    const payment = await Payment.findById(paymentId)
+    if (!payment) {
+      return { success: false, message: "পেমেন্ট পাওয়া যায়নি" }
+    }
+
+    payment.status = status
+    payment.processedAt = new Date()
+    if (adminNote) payment.adminNote = adminNote
+
+    await payment.save()
+    return { success: true, payment }
+  }
+
+  async getUserCourses(email) {
+    const user = await User.findOne({ email })
+    if (!user) return []
+
+    const courses = await Course.find({ _id: { $in: user.courses } })
+    return courses
+  }
+
+  async grantCourseAccess(email, courseId) {
+    const user = await User.findOne({ email })
+    if (user && !user.courses.includes(courseId)) {
+      user.courses.push(courseId)
+      await user.save()
+    }
+  }
+
+  async getCourses() {
+    return await Course.find({ isActive: true }).sort({ createdAt: -1 })
+  }
+
+  async createCourse(courseData) {
+    const course = new Course(courseData)
+    return await course.save()
+  }
+
+  async getUserProgress(email) {
+    return await Progress.find({ userId: email }).populate("courseId")
+  }
+
+  async createProgress(progressData) {
+    const progress = new Progress(progressData)
+    return await progress.save()
+  }
+
+  async updateProgress(email, courseId, lessonId, completed, timeSpent) {
+    let progress = await Progress.findOne({ userId: email, courseId })
+
+    if (!progress) {
+      progress = new Progress({ userId: email, courseId, completedLessons: [], timeSpent: 0 })
+    }
+
+    if (completed && !progress.completedLessons.includes(lessonId)) {
+      progress.completedLessons.push(lessonId)
+    }
+
+    progress.timeSpent += timeSpent || 0
+    progress.lastAccessedLesson = lessonId
+    progress.completionPercentage = Math.round((progress.completedLessons.length / progress.totalLessons) * 100)
+
+    return await progress.save()
+  }
+
+  async getCourseReviews(courseId) {
+    return await Review.find({ courseId, isApproved: true }).sort({ createdAt: -1 })
+  }
+
+  async createReview(reviewData) {
+    const review = new Review(reviewData)
+    return await review.save()
+  }
+
+  async createNotification(notificationData) {
+    const notification = new Notification(notificationData)
+    return await notification.save()
+  }
+
+  async getNotifications() {
+    return await Notification.find().sort({ createdAt: -1 }).limit(50)
+  }
+
+  async markNotificationAsRead(notificationId) {
+    return await Notification.findByIdAndUpdate(notificationId, { isRead: true })
+  }
+}
+
 const app = express()
 const server = http.createServer(app)
 const io = new Server(server, {
@@ -25,8 +384,6 @@ const io = new Server(server, {
     origin: "*",
   },
 })
-
-require("./config/database")
 
 const dbService = new DatabaseService()
 
@@ -311,7 +668,7 @@ app.post("/api/courses/:id/reviews", async (req, res) => {
 })
 
 // Enhanced Authentication Routes
-app.post("/api/register", validateUser, async (req, res) => {
+app.post("/api/register", validateUserRegistration, async (req, res) => {
   try {
     const { name, email, password } = req.body
 
