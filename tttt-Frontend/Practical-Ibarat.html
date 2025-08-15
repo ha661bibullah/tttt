@@ -2654,7 +2654,8 @@ async function resetPassword(email, newPassword) {
     }
 });
             // সাইনআপ ফর্ম সাবমিশন
-           document.getElementById('signupForm').addEventListener('submit', async function(e) {
+          // signupForm সাবমিশন হ্যান্ডলারে এই পরিবর্তনগুলো করুন
+document.getElementById('signupForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     
     const name = document.getElementById('signupName').value.trim();
@@ -2665,28 +2666,21 @@ async function resetPassword(email, newPassword) {
     if (name.length < 2) {
         showError('signupNameError', 'নাম প্রয়োজন');
         return;
-    } else {
-        hideError('signupNameError');
     }
     
     if (password.length < 6) {
         showError('signupPasswordError', 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে');
         return;
-    } else {
-        hideError('signupPasswordError');
     }
     
     if (password !== confirmPassword) {
         showError('signupConfirmPasswordError', 'পাসওয়ার্ড মিলছে না');
         return;
-    } else {
-        hideError('signupConfirmPasswordError');
     }
-    
+
     try {
         showLoading();
         
-        // রেজিস্ট্রেশন রিকোয়েস্ট
         const response = await fetch('https://tttt-tbz0.onrender.com/api/register', {
             method: 'POST',
             headers: {
@@ -2702,6 +2696,7 @@ async function resetPassword(email, newPassword) {
         const result = await response.json();
         
         if (!response.ok) {
+            // সার্ভার থেকে এরর মেসেজ দেখান
             throw new Error(result.message || 'রেজিস্ট্রেশনে সমস্যা হয়েছে');
         }
 
@@ -2712,10 +2707,11 @@ async function resetPassword(email, newPassword) {
     } catch (error) {
         console.error('Registration error:', error);
         
-        // বিশেষভাবে "User already exists" এরর হ্যান্ডেল
-        if (error.message.includes('already exists')) {
-            showError('signupNameError', 'এই ইমেইলটি ইতিমধ্যে ব্যবহার করা হয়েছে');
-            toggleForm('login'); // ইউজারকে লগইন পেজে নিয়ে যান
+        // বিশেষভাবে "ইমেইল already exists" এরর হ্যান্ডেল
+        if (error.message.includes('ইতিমধ্যে ব্যবহার করা হয়েছে')) {
+            showError('signupNameError', error.message);
+            // ইউজারকে লগইন পেজে নিয়ে যান
+            toggleForm('login');
         } else {
             showNotification(error.message || 'রেজিস্ট্রেশনে সমস্যা হয়েছে', 'error');
         }
@@ -2723,7 +2719,7 @@ async function resetPassword(email, newPassword) {
         hideLoading();
     }
 });
-            // লগইন ফর্ম সাবমিশন
+// লগইন ফর্ম সাবমিশন
             document.getElementById('loginForm').addEventListener('submit', async function(e) {
                 e.preventDefault();
                 
@@ -6701,7 +6697,20 @@ window.addEventListener('DOMContentLoaded', function() {
 // Listen for course access updates
 // ক্লায়েন্ট সাইড (Practical-Ibarat.html)
 if (typeof io !== 'undefined') {
-    const socket = io('https://tttt-tbz0.onrender.com');
+    const socket = io('https://tttt-tbz0.onrender.com', {
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+        transports: ['websocket', 'polling']
+    });
+
+    socket.on('connect_error', (error) => {
+        console.error('Socket connection error:', error);
+    });
+
+    socket.on('reconnect_attempt', () => {
+        console.log('Attempting to reconnect...');
+    });
 
     socket.on('courseAccessUpdated', (data) => {
         const user = JSON.parse(localStorage.getItem('currentUser'));
@@ -6711,6 +6720,9 @@ if (typeof io !== 'undefined') {
         }
     });
 } else {
+    console.error('Socket.io library is not loaded');
+}
+    
     // Fallback for same-origin tabs using localStorage event
     window.addEventListener('storage', function(e) {
         if (e.key === 'courseAccessUpdated') {
@@ -6723,7 +6735,6 @@ if (typeof io !== 'undefined') {
             }
         }
     });
-}
 
 
 
