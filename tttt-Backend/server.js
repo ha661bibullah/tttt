@@ -8,6 +8,15 @@ const { Server } = require("socket.io")
 const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
 
+const User = require("./models/User")
+const Course = require("./models/Course")
+const Payment = require("./models/Payment")
+const Progress = require("./models/Progress")
+const Review = require("./models/Review")
+const Notification = require("./models/Notification")
+const DatabaseService = require("./services/DatabaseService")
+const { validatePayment, validateUser, validateCourse } = require("./middleware/validation")
+
 dotenv.config()
 const app = express()
 const server = http.createServer(app)
@@ -17,91 +26,47 @@ const io = new Server(server, {
   },
 })
 
-// MongoDB কানেকশন
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB Connected"))
-  .catch((err) => console.error("MongoDB Connection Error:", err))
+require("./config/database")
 
-// মডেল ডিফাইন
-const User = mongoose.model(
-  "User",
-  new mongoose.Schema({
-    name: String,
-    email: { type: String, unique: true },
-    password: String,
-    courses: [String],
-    otp: String,
-    otpExpires: Date,
-    resetToken: String,
-    resetTokenExpires: Date,
-  }),
-)
-
-const Payment = mongoose.model(
-  "Payment",
-  new mongoose.Schema({
-    userId: String,
-    name: String,
-    email: String,
-    phone: String,
-    courseId: String,
-    courseName: String,
-    paymentMethod: String,
-    txnId: String,
-    amount: Number,
-    status: { type: String, default: "pending" },
-    date: { type: Date, default: Date.now },
-  }),
-)
-
-const Course = mongoose.model(
-  "Course",
-  new mongoose.Schema({
-    id: String,
-    title: String,
-    description: String,
-    price: Number,
-    duration: String,
-    instructor: String,
-    createdAt: { type: Date, default: Date.now },
-  }),
-)
+const dbService = new DatabaseService()
 
 // মিডলওয়্যার
 app.use(cors())
 app.use(express.json())
 
-// ====== নতুন পেমেন্ট ভ্যালিডেশন মিডলওয়্যার ======
-const validatePayment = (req, res, next) => {
-  const { name, email, phone, courseId, paymentMethod, txnId, amount } = req.body
-
-  if (!name || !email || !phone || !courseId || !paymentMethod || !txnId || !amount) {
-    return res.status(400).json({ message: "সমস্ত প্রয়োজনীয় ফিল্ড পূরণ করুন" })
-  }
-
-  if (!["bkash", "nagad", "bank", "card"].includes(paymentMethod)) {
-    return res.status(400).json({ message: "অবৈধ পেমেন্ট মাধ্যম" })
-  }
-
-  next()
-}
-
-// ======= নতুন রাউট =======
+// ======= Enhanced User Routes =======
 app.get("/api/users/:email/courses", async (req, res) => {
   try {
-    const user = await User.findOne({ email: req.params.email })
-    if (!user) {
-      return res.status(404).json({ message: "User not found" })
-    }
-    res.json({ courses: user.courses || [] })
+    const userCourses = await dbService.getUserCourses(req.params.email)
+    res.json({ courses: userCourses })
   } catch (error) {
     console.error("Error fetching user courses:", error)
     res.status(500).json({ message: "Error fetching user courses" })
   }
 })
 
-// OTP রাউটস
+app.get("/api/users/:email/progress", async (req, res) => {
+  try {
+    const progress = await dbService.getUserProgress(req.params.email)
+    res.json(progress)
+  } catch (error) {
+    console.error("Error fetching user progress:", error)
+    res.status(500).json({ message: "অগ্রগতি লোড করতে সমস্যা হয়েছে" })
+  }
+})
+
+app.post("/api/users/:email/progress", async (req, res) => {
+  try {
+    const { courseId, lessonId, completed, timeSpent } = req.body
+    const progress = await dbService.updateProgress(req.params.email, courseId, lessonId, completed, timeSpent)
+    res.json(progress)
+  } catch (error) {
+    console.error("Error updating progress:", error)
+    res.status(500).json({ message: "অগ্রগতি আপডেট করতে সমস্যা হয়েছে" })
+  }
+})
+
+// OTP রাউটস (Enhanced)
 app.post("/api/send-otp", async (req, res) => {
   try {
     const { email } = req.body
@@ -119,12 +84,31 @@ app.post("/api/send-otp", async (req, res) => {
       from: process.env.EMAIL_USER,
       to: email,
       subject: "তালিমুল ইসলাম একাডেমি - OTP কোড",
-      text: `আপনার OTP কোড: ${otp}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #2563eb; text-align: center;">তালিমুল ইসলাম একাডেমি</h2>
+          <div style="background: #f8fafc; padding: 20px; border-radius: 8px; text-align: center;">
+            <h3 style="color: #1e293b;">আপনার OTP কোড</h3>
+            <div style="font-size: 32px; font-weight: bold; color: #059669; letter-spacing: 4px; margin: 20px 0;">
+              ${otp}
+            </div>
+            <p style="color: #64748b;">এই কোডটি ৫ মিনিটের জন্য বৈধ</p>
+          </div>
+        </div>
+      `,
     }
 
     await transporter.sendMail(mailOptions)
 
-    await User.findOneAndUpdate({ email }, { otp, otpExpires: Date.now() + 300000 }, { upsert: true, new: true })
+    await User.findOneAndUpdate(
+      { email },
+      {
+        otp: otp,
+        otpExpires: Date.now() + 300000,
+        lastOtpSent: new Date(),
+      },
+      { upsert: true, new: true },
+    )
 
     res.json({ success: true, message: "OTP সফলভাবে পাঠানো হয়েছে" })
   } catch (error) {
@@ -149,6 +133,8 @@ app.post("/api/verify-otp", async (req, res) => {
 
     user.otp = undefined
     user.otpExpires = undefined
+    user.emailVerified = true
+    user.lastLogin = new Date()
     await user.save()
 
     res.json({ success: true })
@@ -158,14 +144,26 @@ app.post("/api/verify-otp", async (req, res) => {
   }
 })
 
-// পেমেন্ট রাউটস (মিডলওয়্যার যুক্ত করা হয়েছে)
+// Enhanced Payment Routes
 app.post("/api/payments", validatePayment, async (req, res) => {
   try {
-    const payment = new Payment(req.body)
-    await payment.save()
+    const paymentData = {
+      ...req.body,
+      status: "pending",
+      submittedAt: new Date(),
+      ipAddress: req.ip,
+    }
+
+    const payment = await dbService.createPayment(paymentData)
+
+    await dbService.createNotification({
+      type: "new_payment",
+      title: "নতুন পেমেন্ট রিকুয়েস্ট",
+      message: `${payment.name} একটি নতুন পেমেন্ট জমা দিয়েছেন`,
+      data: { paymentId: payment._id },
+    })
 
     await notifyAdmin(payment._id)
-
     res.status(201).json(payment)
   } catch (error) {
     console.error("Error saving payment:", error)
@@ -176,30 +174,8 @@ app.post("/api/payments", validatePayment, async (req, res) => {
 app.get("/api/admin/payments", async (req, res) => {
   try {
     const { status, page = 1, limit = 10, search = "" } = req.query
-
-    const query = {}
-    if (status) query.status = status
-
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
-        { txnId: { $regex: search, $options: "i" } },
-      ]
-    }
-
-    const payments = await Payment.find(query)
-      .sort({ date: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
-
-    const count = await Payment.countDocuments(query)
-
-    res.json({
-      payments,
-      totalPages: Math.ceil(count / limit),
-      currentPage: page,
-    })
+    const payments = await dbService.getPayments({ status, page, limit, search })
+    res.json(payments)
   } catch (error) {
     console.error("Error fetching payments:", error)
     res.status(500).json({ message: "পেমেন্ট লোড করতে সমস্যা হয়েছে" })
@@ -219,13 +195,11 @@ app.get("/api/admin/payments/:id", async (req, res) => {
   }
 })
 
-// ✅ আপডেটেড PUT রাউট
-// Update the PUT route for payment approval
+// Enhanced Payment Approval
 app.put("/api/admin/payments/:id", async (req, res) => {
   try {
-    const { status } = req.body
+    const { status, adminNote } = req.body
 
-    // Validation
     if (!status || !["approved", "rejected", "pending"].includes(status)) {
       return res.status(400).json({
         success: false,
@@ -233,30 +207,27 @@ app.put("/api/admin/payments/:id", async (req, res) => {
       })
     }
 
-    // Update payment
-    const payment = await Payment.findByIdAndUpdate(req.params.id, { status }, { new: true })
+    const result = await dbService.approvePayment(req.params.id, status, adminNote)
 
-    if (!payment) {
-      return res.status(404).json({
-        success: false,
-        message: "Payment not found",
-      })
+    if (!result.success) {
+      return res.status(404).json(result)
     }
 
-    console.log(`Payment ${payment._id} status updated to: ${status}`)
+    const { payment } = result
 
-    // If approved
+    // If approved, handle course access and notifications
     if (status === "approved") {
-      // Update user's course access
-      const user = await User.findOneAndUpdate(
-        { email: payment.email },
-        { $addToSet: { courses: payment.courseId } },
-        { new: true, upsert: true },
-      )
+      // Grant course access
+      await dbService.grantCourseAccess(payment.email, payment.courseId)
 
-      console.log(`User ${payment.email} granted access to course ${payment.courseId}`)
+      // Create progress tracking
+      await dbService.createProgress({
+        userId: payment.email,
+        courseId: payment.courseId,
+        enrolledAt: new Date(),
+      })
 
-      // Send real-time notification to all connected clients
+      // Send real-time notification
       const notification = {
         type: "courseAccessUpdated",
         email: payment.email,
@@ -267,17 +238,13 @@ app.put("/api/admin/payments/:id", async (req, res) => {
         timestamp: new Date().toISOString(),
       }
 
-      // Emit to all connected clients
       io.emit("courseAccessUpdated", notification)
 
-      console.log("Course access notification broadcasted:", notification)
-
-      // Optional: Send email notification to user
+      // Send email notification
       try {
         await sendCourseAccessEmail(payment.email, payment.name, payment.courseName || payment.courseId)
       } catch (emailError) {
         console.error("Failed to send email notification:", emailError)
-        // Don't fail the request if email fails
       }
     }
 
@@ -296,18 +263,10 @@ app.put("/api/admin/payments/:id", async (req, res) => {
   }
 })
 
-// server.js-তে নোটিফিকেশন ইভেন্ট যোগ করুন
-io.on("connection", (socket) => {
-  console.log("A user connected")
-  socket.on("disconnect", () => {
-    console.log("A user disconnected")
-  })
-})
-
-// কোর্স রাউটস
+// Enhanced Course Routes
 app.get("/api/courses", async (req, res) => {
   try {
-    const courses = await Course.find()
+    const courses = await dbService.getCourses()
     res.json(courses)
   } catch (error) {
     console.error("Error fetching courses:", error)
@@ -315,11 +274,44 @@ app.get("/api/courses", async (req, res) => {
   }
 })
 
-// Authentication Routes
-const saltRounds = 10
+app.post("/api/admin/courses", validateCourse, async (req, res) => {
+  try {
+    const course = await dbService.createCourse(req.body)
+    res.status(201).json(course)
+  } catch (error) {
+    console.error("Error creating course:", error)
+    res.status(500).json({ message: "কোর্স তৈরি করতে সমস্যা হয়েছে" })
+  }
+})
 
-// Registration route
-app.post("/api/register", async (req, res) => {
+app.get("/api/courses/:id/reviews", async (req, res) => {
+  try {
+    const reviews = await dbService.getCourseReviews(req.params.id)
+    res.json(reviews)
+  } catch (error) {
+    console.error("Error fetching reviews:", error)
+    res.status(500).json({ message: "রিভিউ লোড করতে সমস্যা হয়েছে" })
+  }
+})
+
+app.post("/api/courses/:id/reviews", async (req, res) => {
+  try {
+    const { rating, comment, userEmail } = req.body
+    const review = await dbService.createReview({
+      courseId: req.params.id,
+      userEmail,
+      rating,
+      comment,
+    })
+    res.status(201).json(review)
+  } catch (error) {
+    console.error("Error creating review:", error)
+    res.status(500).json({ message: "রিভিউ জমা দিতে সমস্যা হয়েছে" })
+  }
+})
+
+// Enhanced Authentication Routes
+app.post("/api/register", validateUser, async (req, res) => {
   try {
     const { name, email, password } = req.body
 
@@ -328,19 +320,19 @@ app.post("/api/register", async (req, res) => {
       return res.status(400).json({ message: "User already exists" })
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, saltRounds)
+    const hashedPassword = await bcrypt.hash(password, 10)
 
     const user = new User({
       name,
       email,
       password: hashedPassword,
       courses: [],
+      registeredAt: new Date(),
+      lastLogin: new Date(),
     })
 
     await user.save()
 
-    // Generate JWT token
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1d" })
 
     res.status(201).json({
@@ -358,7 +350,6 @@ app.post("/api/register", async (req, res) => {
   }
 })
 
-// Login route
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body
@@ -368,13 +359,14 @@ app.post("/api/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" })
     }
 
-    // Compare hashed password
     const isMatch = await bcrypt.compare(password, user.password)
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid credentials" })
     }
 
-    // Generate JWT token
+    user.lastLogin = new Date()
+    await user.save()
+
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1d" })
 
     res.json({
@@ -392,13 +384,30 @@ app.post("/api/login", async (req, res) => {
   }
 })
 
-// হেল্পার ফাংশন
+app.get("/api/admin/notifications", async (req, res) => {
+  try {
+    const notifications = await dbService.getNotifications()
+    res.json(notifications)
+  } catch (error) {
+    console.error("Error fetching notifications:", error)
+    res.status(500).json({ message: "নোটিফিকেশন লোড করতে সমস্যা হয়েছে" })
+  }
+})
+
+app.put("/api/admin/notifications/:id/read", async (req, res) => {
+  try {
+    await dbService.markNotificationAsRead(req.params.id)
+    res.json({ success: true })
+  } catch (error) {
+    console.error("Error marking notification as read:", error)
+    res.status(500).json({ message: "নোটিফিকেশন আপডেট করতে সমস্যা হয়েছে" })
+  }
+})
+
+// Enhanced helper functions
 async function notifyAdmin(paymentId) {
   console.log(`New payment created: ${paymentId}`)
-}
-
-async function notifyUser(email, courseId) {
-  console.log(`User with email ${email} granted access to course ${courseId}`)
+  io.emit("newPayment", { paymentId, timestamp: new Date() })
 }
 
 async function sendCourseAccessEmail(email, name, courseName) {
@@ -416,41 +425,86 @@ async function sendCourseAccessEmail(email, name, courseName) {
       to: email,
       subject: "তালিমুল ইসলাম একাডেমি - কোর্স অনুমোদিত হয়েছে",
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #4caf50;">🎉 অভিনন্দন!</h2>
-          <p>প্রিয় ${name},</p>
-          <p>আপনার পেমেন্ট সফলভাবে অনুমোদিত হয়েছে এবং <strong>"${courseName}"</strong> কোর্সে আপনার অ্যাক্সেস চালু করা হয়েছে।</p>
-          <p>এখন আপনি সমস্ত ভিডিও, নোট এবং অন্যান্য কন্টেন্ট দেখতে পারবেন।</p>
-          <p style="margin-top: 20px;">
-            <a href="https://your-course-website.com/practical-ibarat" 
-               style="background: #4caf50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px;">
-              কোর্স শুরু করুন
-            </a>
-          </p>
-          <p style="margin-top: 20px; color: #666;">
-            ধন্যবাদ,<br>
-            তালিমুল ইসলাম একাডেমি টিম
-          </p>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f8fafc;">
+          <div style="background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <div style="text-align: center; margin-bottom: 30px;">
+              <h1 style="color: #2563eb; margin: 0;">তালিমুল ইসলাম একাডেমি</h1>
+              <div style="width: 50px; height: 3px; background: #10b981; margin: 10px auto;"></div>
+            </div>
+            
+            <h2 style="color: #059669; text-align: center; margin-bottom: 20px;">🎉 অভিনন্দন!</h2>
+            
+            <p style="font-size: 16px; line-height: 1.6; color: #374151;">প্রিয় <strong>${name}</strong>,</p>
+            
+            <p style="font-size: 16px; line-height: 1.6; color: #374151;">
+              আপনার পেমেন্ট সফলভাবে অনুমোদিত হয়েছে এবং <strong style="color: #2563eb;">"${courseName}"</strong> কোর্সে আপনার অ্যাক্সেস চালু করা হয়েছে।
+            </p>
+            
+            <div style="background: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #2563eb;">
+              <p style="margin: 0; color: #1e40af; font-weight: 500;">এখন আপনি পাবেন:</p>
+              <ul style="color: #374151; margin: 10px 0;">
+                <li>সমস্ত ভিডিও লেকচার</li>
+                <li>পিডিএফ নোট ও বই</li>
+                <li>অনুশীলনী ও কুইজ</li>
+                <li>সার্টিফিকেট (কোর্স সম্পূর্ণ করার পর)</li>
+              </ul>
+            </div>
+            
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${process.env.FRONTEND_URL || "https://your-course-website.com"}/courses/${courseName.toLowerCase().replace(/\s+/g, "-")}" 
+                 style="display: inline-block; background: #059669; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                কোর্স শুরু করুন
+              </a>
+            </div>
+            
+            <div style="border-top: 1px solid #e5e7eb; padding-top: 20px; margin-top: 30px;">
+              <p style="color: #6b7280; font-size: 14px; text-align: center; margin: 0;">
+                কোনো সমস্যা হলে আমাদের সাথে যোগাযোগ করুন: <a href="mailto:${process.env.EMAIL_USER}" style="color: #2563eb;">${process.env.EMAIL_USER}</a>
+              </p>
+            </div>
+            
+            <div style="text-align: center; margin-top: 20px;">
+              <p style="color: #6b7280; margin: 0;">
+                ধন্যবাদ,<br>
+                <strong style="color: #374151;">তালিমুল ইসলাম একাডেমি টিম</strong>
+              </p>
+            </div>
+          </div>
         </div>
       `,
     }
 
     await transporter.sendMail(mailOptions)
-    console.log(`Course access email sent to ${email}`)
+    console.log(`Enhanced course access email sent to ${email}`)
   } catch (error) {
     console.error("Error sending course access email:", error)
     throw error
   }
 }
 
-// WebSocket কানেকশন
+// Enhanced WebSocket connection
 io.on("connection", (socket) => {
-  console.log("A user connected")
+  console.log("A user connected:", socket.id)
+
+  socket.on("joinAdminRoom", () => {
+    socket.join("admin")
+    console.log("Admin joined room")
+  })
+
+  socket.on("joinUserRoom", (email) => {
+    socket.join(`user_${email}`)
+    console.log(`User ${email} joined room`)
+  })
+
   socket.on("disconnect", () => {
-    console.log("A user disconnected")
+    console.log("User disconnected:", socket.id)
   })
 })
 
 // সার্ভার শুরু করুন
 const PORT = process.env.PORT || 5000
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`))
+server.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`)
+  console.log(`📊 Database: MongoDB Connected`)
+  console.log(`🔌 WebSocket: Socket.IO Ready`)
+})
