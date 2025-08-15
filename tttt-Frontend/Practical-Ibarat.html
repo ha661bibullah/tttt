@@ -2063,7 +2063,7 @@
     // ====================
     // Login Module
     // ====================
-  
+   
     // হেডার ব্লার ইফেক্ট
     function setHeaderBlur(active) {
         const header = document.querySelector('.header');
@@ -2291,9 +2291,11 @@ const LoginModule = (() => {
         
         if (formType === 'login') {
             document.getElementById('loginSection').style.display = 'block';
+            document.getElementById('loginForm').style.display = 'block';
             document.getElementById('loginEmail').focus();
         } else if (formType === 'emailCheck') {
             document.getElementById('emailCheckSection').style.display = 'block';
+            document.getElementById('emailCheckForm').style.display = 'block';
             document.getElementById('checkEmail').focus();
         } else if (formType === 'otpVerification') {
             document.getElementById('otpVerificationSection').style.display = 'block';
@@ -2303,6 +2305,7 @@ const LoginModule = (() => {
             document.getElementById('signupName').focus();
         } else if (formType === 'forgotPassword') {
             document.getElementById('forgotPasswordSection').style.display = 'block';
+            document.getElementById('forgotPasswordForm').style.display = 'block';
             document.getElementById('forgotEmail').focus();
         } else if (formType === 'resetPassword') {
             document.getElementById('resetPasswordSection').style.display = 'block';
@@ -2813,7 +2816,6 @@ const LoginModule = (() => {
         handleLogout
     };
 })();
-
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
     LoginModule.initLoginForms();
