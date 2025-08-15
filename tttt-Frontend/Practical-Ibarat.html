@@ -2586,23 +2586,27 @@ async function verifyOTP(email, otp) {
     e.preventDefault();
     
     // OTP ইনপুট থেকে মান সংগ্রহ করুন
-    const otp1 = document.getElementById('otp1').value;
-    const otp2 = document.getElementById('otp2').value;
-    const otp3 = document.getElementById('otp3').value;
-    const otp4 = document.getElementById('otp4').value;
+    const otp1 = document.getElementById('otp1').value.trim();
+    const otp2 = document.getElementById('otp2').value.trim();
+    const otp3 = document.getElementById('otp3').value.trim();
+    const otp4 = document.getElementById('otp4').value.trim();
     
     const otp = otp1 + otp2 + otp3 + otp4;
     
-    // OTP ভ্যালিডেশন
-    if (otp.length !== 4 || !/^\d+$/.test(otp)) {
-        showError('otpError', 'অনুগ্রহ করে সঠিক ৪ সংখ্যার অটিপি দিন');
+    if (otp.length !== 4) {
+        showError('otpError', 'অনুগ্রহ করে ৪টি সংখ্যা দিন');
+        return;
+    }
+    
+    if (!/^\d{4}$/.test(otp)) {
+        showError('otpError', 'অনুগ্রহ করে শুধুমাত্র সংখ্যা ব্যবহার করুন');
         return;
     }
     
     hideError('otpError');
     
     try {
-        const verified = await verifyOTP(currentUserEmail, otp);
+        const verified = await verifyOTP(currentUserEmail, otp.toString());
         
         if (verified) {
             // OTP সঠিক হলে পরবর্তী স্টেপে যান
@@ -2613,10 +2617,20 @@ async function verifyOTP(email, otp) {
             }
         } else {
             showError('otpError', 'অটিপি মিলছে না, আবার চেষ্টা করুন');
+            document.getElementById('otp1').value = '';
+            document.getElementById('otp2').value = '';
+            document.getElementById('otp3').value = '';
+            document.getElementById('otp4').value = '';
+            document.getElementById('otp1').focus();
         }
     } catch (error) {
         console.error('OTP verification error:', error);
         showError('otpError', 'অটিপি যাচাই করতে সমস্যা হয়েছে');
+        document.getElementById('otp1').value = '';
+        document.getElementById('otp2').value = '';
+        document.getElementById('otp3').value = '';
+        document.getElementById('otp4').value = '';
+        document.getElementById('otp1').focus();
     }
 });
             // সাইনআপ ফর্ম সাবমিশন
@@ -2797,6 +2811,9 @@ document.getElementById('mobileDropdownContent').addEventListener('click', funct
 const otpInputs = document.querySelectorAll('.otp-digit');
 otpInputs.forEach((input, index) => {
     input.addEventListener('input', function(e) {
+        // Only allow numbers
+        this.value = this.value.replace(/[^0-9]/g, '');
+        
         if (this.value.length === 1) {
             if (index < otpInputs.length - 1) {
                 otpInputs[index + 1].focus();
@@ -2809,6 +2826,27 @@ otpInputs.forEach((input, index) => {
             if (index > 0) {
                 otpInputs[index - 1].focus();
             }
+        }
+        
+        if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+            e.preventDefault();
+        }
+    });
+    
+    input.addEventListener('paste', function(e) {
+        e.preventDefault();
+        const paste = (e.clipboardData || window.clipboardData).getData('text');
+        const numericPaste = paste.replace(/[^0-9]/g, '');
+        
+        if (numericPaste.length > 0) {
+            // Fill inputs with pasted numbers
+            for (let i = 0; i < Math.min(numericPaste.length, otpInputs.length - index); i++) {
+                otpInputs[index + i].value = numericPaste[i];
+            }
+            
+            // Focus next empty input or last input
+            const nextIndex = Math.min(index + numericPaste.length, otpInputs.length - 1);
+            otpInputs[nextIndex].focus();
         }
     });
 });
@@ -3017,6 +3055,7 @@ window.togglePasswordVisibility = function(inputId, toggleId) {
     }
 };
 </script>
+
 
 
 

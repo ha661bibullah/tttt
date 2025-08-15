@@ -392,6 +392,7 @@ app.use(cors())
 app.use(express.json())
 
 // ======= Enhanced User Routes =======
+
 app.get("/api/users/:email/courses", async (req, res) => {
   try {
     const userCourses = await dbService.getUserCourses(req.params.email)
@@ -426,8 +427,23 @@ app.post("/api/users/:email/progress", async (req, res) => {
 // OTP রাউটস (Enhanced)
 app.post("/api/send-otp", async (req, res) => {
   try {
-    const { email } = req.body
-    const otp = Math.floor(1000 + Math.random() * 9000).toString()
+    const { email, otp } = req.body
+
+    console.log("OTP Send Request:", { email, sentOTP: otp, otpType: typeof otp })
+
+    if (!email) {
+      return res.status(400).json({ success: false, message: "ইমেইল প্রয়োজন" })
+    }
+
+    let finalOTP = otp
+    if (!finalOTP) {
+      finalOTP = Math.floor(1000 + Math.random() * 9000).toString()
+    }
+
+    finalOTP = String(finalOTP).trim()
+    if (!/^\d{4}$/.test(finalOTP)) {
+      finalOTP = Math.floor(1000 + Math.random() * 9000).toString()
+    }
 
     const transporter = nodemailer.createTransport({
       service: "gmail",
@@ -447,7 +463,7 @@ app.post("/api/send-otp", async (req, res) => {
           <div style="background: #f8fafc; padding: 20px; border-radius: 8px; text-align: center;">
             <h3 style="color: #1e293b;">আপনার OTP কোড</h3>
             <div style="font-size: 32px; font-weight: bold; color: #059669; letter-spacing: 4px; margin: 20px 0;">
-              ${otp}
+              ${finalOTP}
             </div>
             <p style="color: #64748b;">এই কোডটি ৫ মিনিটের জন্য বৈধ</p>
           </div>
@@ -458,14 +474,16 @@ app.post("/api/send-otp", async (req, res) => {
     await transporter.sendMail(mailOptions)
 
     await User.findOneAndUpdate(
-      { email },
+      { email: email.toLowerCase().trim() },
       {
-        otp: otp,
-        otpExpires: Date.now() + 300000,
+        otp: finalOTP,
+        otpExpires: Date.now() + 300000, // 5 minutes
         lastOtpSent: new Date(),
       },
       { upsert: true, new: true },
     )
+
+    console.log("OTP sent successfully:", { email, otp: finalOTP })
 
     res.json({ success: true, message: "OTP সফলভাবে পাঠানো হয়েছে" })
   } catch (error) {
@@ -478,14 +496,55 @@ app.post("/api/verify-otp", async (req, res) => {
   try {
     const { email, otp } = req.body
 
-    const user = await User.findOne({ email })
+    console.log("OTP Verification Request:", { email, receivedOTP: otp, otpType: typeof otp })
 
-    if (!user || user.otp !== otp) {
-      return res.status(400).json({ success: false, message: "অবৈধ OTP" })
+    if (!email || !otp) {
+      return res.status(400).json({ success: false, message: "ইমেইল এবং OTP প্রয়োজন" })
     }
 
-    if (user.otpExpires < Date.now()) {
-      return res.status(400).json({ success: false, message: "OTP এর মেয়াদ শেষ হয়ে গেছে" })
+    const cleanOTP = String(otp).trim()
+
+    if (!/^\d{4}$/.test(cleanOTP)) {
+      return res.status(400).json({ success: false, message: "অবৈধ OTP ফর্ম্যাট" })
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() })
+
+    if (!user) {
+      console.log("User not found for email:", email)
+      return res.status(400).json({ success: false, message: "ব্যবহারকারী পাওয়া যায়নি" })
+    }
+
+    console.log("User found:", {
+      email: user.email,
+      storedOTP: user.otp,
+      storedOTPType: typeof user.otp,
+      otpExpires: user.otpExpires,
+      currentTime: Date.now(),
+    })
+
+    if (!user.otp) {
+      return res.status(400).json({ success: false, message: "কোনো OTP পাওয়া যায়নি। নতুন OTP চান।" })
+    }
+
+    if (user.otpExpires && user.otpExpires < Date.now()) {
+      // Clear expired OTP
+      user.otp = undefined
+      user.otpExpires = undefined
+      await user.save()
+      return res.status(400).json({ success: false, message: "OTP এর মেয়াদ শেষ হয়ে গেছে। নতুন OTP চান।" })
+    }
+
+    const storedOTP = String(user.otp).trim()
+
+    console.log("OTP Comparison:", {
+      cleanOTP,
+      storedOTP,
+      match: cleanOTP === storedOTP,
+    })
+
+    if (storedOTP !== cleanOTP) {
+      return res.status(400).json({ success: false, message: "অবৈধ OTP" })
     }
 
     user.otp = undefined
@@ -494,7 +553,9 @@ app.post("/api/verify-otp", async (req, res) => {
     user.lastLogin = new Date()
     await user.save()
 
-    res.json({ success: true })
+    console.log("OTP verification successful for:", email)
+
+    res.json({ success: true, message: "OTP সফলভাবে যাচাই হয়েছে" })
   } catch (error) {
     console.error("Error verifying OTP:", error)
     res.status(500).json({ success: false, message: "OTP যাচাই করতে সমস্যা হয়েছে" })
