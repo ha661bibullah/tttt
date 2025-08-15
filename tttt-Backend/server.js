@@ -24,19 +24,64 @@ mongoose
   .catch((err) => console.error("MongoDB Connection Error:", err))
 
 // মডেল ডিফাইন
-const User = mongoose.model(
-  "User",
-  new mongoose.Schema({
-    name: String,
-    email: { type: String, unique: true },
-    password: String,
-    courses: [String],
-    otp: String,
-    otpExpires: Date,
-    resetToken: String,
-    resetTokenExpires: Date,
-  }),
-)
+const userSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: [true, "নাম প্রদান করা বাধ্যতামূলক"],
+    trim: true
+  },
+  email: {
+    type: String,
+    required: [true, "ইমেইল প্রদান করা বাধ্যতামূলক"],
+    unique: true,
+    trim: true,
+    lowercase: true,
+    validate: {
+      validator: function(v) {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+      },
+      message: props => `${props.value} একটি বৈধ ইমেইল নয়`
+    }
+  },
+  password: {
+    type: String,
+    required: [true, "পাসওয়ার্ড প্রদান করা বাধ্যতামূলক"],
+    minlength: [6, "পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে"],
+    select: false
+  },
+  phone: {
+    type: String,
+    trim: true
+  },
+  courses: [{
+    courseId: String,
+    courseName: String,
+    enrolledAt: {
+      type: Date,
+      default: Date.now
+    },
+    progress: {
+      type: Number,
+      default: 0
+    }
+  }],
+  role: {
+    type: String,
+    enum: ["user", "admin"],
+    default: "user"
+  },
+  otp: String,
+  otpExpires: Date,
+  resetToken: String,
+  resetTokenExpires: Date,
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: Date
+});
+
+const User = mongoose.model("User", userSchema);
 
 const Payment = mongoose.model(
   "Payment",
@@ -321,76 +366,239 @@ const saltRounds = 10
 // Registration route
 app.post("/api/register", async (req, res) => {
   try {
-    const { name, email, password } = req.body
+    const { name, email, password, phone } = req.body;
 
-    const existingUser = await User.findOne({ email })
+    // Validate required fields
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "নাম, ইমেইল এবং পাসওয়ার্ড প্রদান করা বাধ্যতামূলক"
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ message: "User already exists" })
+      return res.status(400).json({
+        success: false,
+        message: "এই ইমেইলটি ইতিমধ্যে ব্যবহার করা হয়েছে"
+      });
     }
 
     // Hash password
-    const hashedPassword = await bcrypt.hash(password, saltRounds)
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
 
+    // Create new user
     const user = new User({
       name,
       email,
       password: hashedPassword,
-      courses: [],
-    })
+      phone,
+      courses: []
+    });
 
-    await user.save()
+    await user.save();
 
     // Generate JWT token
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1d" })
+    const token = jwt.sign(
+      { userId: user._id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
 
     res.status(201).json({
+      success: true,
       token,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
-        courses: user.courses,
-      },
-    })
+        phone: user.phone,
+        role: user.role
+      }
+    });
   } catch (error) {
-    console.error("Registration error:", error)
-    res.status(500).json({ message: "Registration failed" })
+    console.error("রেজিস্ট্রেশন ত্রুটি:", error);
+    res.status(500).json({
+      success: false,
+      message: "রেজিস্ট্রেশনে সমস্যা হয়েছে",
+      error: error.message
+    });
   }
-})
+});
 
 // Login route
 app.post("/api/login", async (req, res) => {
   try {
-    const { email, password } = req.body
+    const { email, password } = req.body;
 
-    const user = await User.findOne({ email })
-    if (!user) {
-      return res.status(401).json({ message: "Invalid credentials" })
+    // Validate required fields
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "ইমেইল এবং পাসওয়ার্ড প্রদান করা বাধ্যতামূলক"
+      });
     }
 
-    // Compare hashed password
-    const isMatch = await bcrypt.compare(password, user.password)
+    // Find user by email
+    const user = await User.findOne({ email }).select("+password");
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "ভুল ইমেইল বা পাসওয়ার্ড"
+      });
+    }
+
+    // Compare passwords
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(401).json({ message: "Invalid credentials" })
+      return res.status(401).json({
+        success: false,
+        message: "ভুল ইমেইল বা পাসওয়ার্ড"
+      });
     }
 
     // Generate JWT token
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1d" })
+    const token = jwt.sign(
+      { userId: user._id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
 
     res.json({
+      success: true,
       token,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
-        courses: user.courses,
-      },
-    })
+        phone: user.phone,
+        role: user.role,
+        courses: user.courses
+      }
+    });
   } catch (error) {
-    console.error("Login error:", error)
-    res.status(500).json({ message: "Login failed" })
+    console.error("লগইন ত্রুটি:", error);
+    res.status(500).json({
+      success: false,
+      message: "লগইনে সমস্যা হয়েছে",
+      error: error.message
+    });
   }
-})
+});
+
+
+
+
+// Protect middleware
+const protect = async (req, res, next) => {
+  let token;
+  
+  if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
+    token = req.headers.authorization.split(" ")[1];
+  }
+
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      message: "অনুগ্রহ করে লগইন করুন"
+    });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = await User.findById(decoded.userId);
+    next();
+  } catch (error) {
+    console.error("টোকেন যাচাই ত্রুটি:", error);
+    res.status(401).json({
+      success: false,
+      message: "অনুগ্রহ করে পুনরায় লগইন করুন"
+    });
+  }
+};
+
+// Get user profile
+app.get("/api/users/me", protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select("-password");
+    
+    res.json({
+      success: true,
+      user
+    });
+  } catch (error) {
+    console.error("প্রোফাইল লোড ত্রুটি:", error);
+    res.status(500).json({
+      success: false,
+      message: "প্রোফাইল লোড করতে সমস্যা হয়েছে"
+    });
+  }
+});
+
+
+app.put("/api/users/me", protect, async (req, res) => {
+  try {
+    const { name, phone } = req.body;
+    
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { name, phone, updatedAt: Date.now() },
+      { new: true, runValidators: true }
+    ).select("-password");
+
+    res.json({
+      success: true,
+      user
+    });
+  } catch (error) {
+    console.error("প্রোফাইল আপডেট ত্রুটি:", error);
+    res.status(500).json({
+      success: false,
+      message: "প্রোফাইল আপডেট করতে সমস্যা হয়েছে"
+    });
+  }
+});
+
+
+app.put("/api/users/update-password", protect, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "বর্তমান এবং নতুন পাসওয়ার্ড প্রদান করুন"
+      });
+    }
+
+    const user = await User.findById(req.user._id).select("+password");
+    
+    // Check current password
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: "বর্তমান পাসওয়ার্ড সঠিক নয়"
+      });
+    }
+
+    // Hash new password
+    user.password = await bcrypt.hash(newPassword, saltRounds);
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে"
+    });
+  } catch (error) {
+    console.error("পাসওয়ার্ড পরিবর্তন ত্রুটি:", error);
+    res.status(500).json({
+      success: false,
+      message: "পাসওয়ার্ড পরিবর্তনে সমস্যা হয়েছে"
+    });
+  }
+});
 
 // হেল্পার ফাংশন
 async function notifyAdmin(paymentId) {
