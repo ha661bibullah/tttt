@@ -320,43 +320,74 @@ const saltRounds = 10
 
 // Registration route
 app.post("/api/register", async (req, res) => {
-  try {
-    const { name, email, password } = req.body
+    try {
+        const { name, email, password } = req.body;
 
-    const existingUser = await User.findOne({ email })
-    if (existingUser) {
-      return res.status(400).json({ message: "User already exists" })
+        // ইমেইল ভ্যালিডেশন
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return res.status(400).json({ 
+                success: false,
+                message: "অবৈধ ইমেইল ঠিকানা"
+            });
+        }
+
+        // ইউজার এক্সিস্ট চেক
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            return res.status(400).json({ 
+                success: false,
+                message: "এই ইমেইলটি ইতিমধ্যে ব্যবহার করা হয়েছে। লগইন করুন অথবা অন্য ইমেইল ব্যবহার করুন।"
+            });
+        }
+
+        // পাসওয়ার্ড হ্যাশ
+        const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+        // নতুন ইউজার তৈরি
+        const user = new User({
+            name,
+            email,
+            password: hashedPassword,
+            courses: [],
+        });
+
+        await user.save();
+
+        // JWT টোকেন জেনারেট
+        const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { 
+            expiresIn: "1d" 
+        });
+
+        res.status(201).json({
+            success: true,
+            token,
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                courses: user.courses,
+            },
+            message: "রেজিস্ট্রেশন সফল হয়েছে!"
+        });
+
+    } catch (error) {
+        console.error("Registration error:", error);
+        
+        // MongoDB ডুপ্লিকেট কী এরর হ্যান্ডেল
+        if (error.code === 11000) {
+            return res.status(400).json({
+                success: false,
+                message: "এই ইমেইলটি ইতিমধ্যে ব্যবহার করা হয়েছে"
+            });
+        }
+        
+        res.status(500).json({
+            success: false,
+            message: "রেজিস্ট্রেশন ব্যর্থ হয়েছে",
+            error: error.message
+        });
     }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, saltRounds)
-
-    const user = new User({
-      name,
-      email,
-      password: hashedPassword,
-      courses: [],
-    })
-
-    await user.save()
-
-    // Generate JWT token
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1d" })
-
-    res.status(201).json({
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        courses: user.courses,
-      },
-    })
-  } catch (error) {
-    console.error("Registration error:", error)
-    res.status(500).json({ message: "Registration failed" })
-  }
-})
+});
 
 // Login route
 app.post("/api/login", async (req, res) => {
