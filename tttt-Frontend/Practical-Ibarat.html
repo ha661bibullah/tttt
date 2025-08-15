@@ -2592,9 +2592,7 @@ async function verifyOTP(email, otp) {
     const otp3 = document.getElementById('otp3').value.trim();
     const otp4 = document.getElementById('otp4').value.trim();
     
-    // When submitting OTP
-const otp = `${otp1}${otp2}${otp3}${otp4}`;
-const response = await verifyOTP(email, otp);
+    const otp = otp1 + otp2 + otp3 + otp4;
     
     if (otp.length !== 4) {
         showError('otpError', 'অনুগ্রহ করে ৪টি সংখ্যা দিন');
