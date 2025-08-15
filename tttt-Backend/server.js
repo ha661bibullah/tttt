@@ -8,7 +8,7 @@ const { Server } = require("socket.io")
 const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
 
-const User = require("./models/User")
+const User = require('./models/User')
 const Course = require("./models/Course")
 const Payment = require("./models/Payment")
 const Progress = require("./models/Progress")
