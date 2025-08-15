@@ -373,19 +373,28 @@ app.get("/api/courses", async (req, res) => {
 const saltRounds = 10
 
 // Registration route
+// server.js-তে রেজিস্ট্রেশন রাউট আপডেট করুন
 app.post("/api/register", async (req, res) => {
     try {
         const { name, email, password } = req.body;
 
-        // Validate email format
-        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        // ভ্যালিডেশন
+        if (!name || !email || !password) {
             return res.status(400).json({ 
                 success: false,
-                message: "অবৈধ ইমেইল ঠিকানা"
+                message: "নাম, ইমেইল এবং পাসওয়ার্ড প্রয়োজন"
             });
         }
 
-        // Check if user exists
+        // ইমেইল ফরম্যাট চেক
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return res.status(400).json({ 
+                success: false,
+                message: "অবৈধ ইমেইল ফরম্যাট"
+            });
+        }
+
+        // ইমেইল ইতিমধ্যে আছে কিনা চেক
         const existingUser = await User.findOne({ email });
         if (existingUser) {
             return res.status(400).json({ 
@@ -394,10 +403,10 @@ app.post("/api/register", async (req, res) => {
             });
         }
 
-        // Hash password
+        // পাসওয়ার্ড হ্যাশ
         const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-        // Create new user
+        // নতুন ইউজার তৈরি
         const user = new User({
             name,
             email,
@@ -407,24 +416,27 @@ app.post("/api/register", async (req, res) => {
 
         await user.save();
 
-        // Generate JWT token
-        const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { 
-            expiresIn: "1d" 
-        });
+        // JWT টোকেন জেনারেট
+        const token = jwt.sign(
+            { userId: user._id, email: user.email },
+            process.env.JWT_SECRET,
+            { expiresIn: "1d" }
+        );
 
+        // সফল রেসপন্স
         res.status(201).json({
             success: true,
+            message: "রেজিস্ট্রেশন সফল হয়েছে",
             token,
             user: {
                 id: user._id,
                 name: user.name,
-                email: user.email,
-                courses: user.courses
+                email: user.email
             }
         });
 
     } catch (error) {
-        console.error("Registration error:", error);
+        console.error("রেজিস্ট্রেশন এরর:", error);
         res.status(500).json({
             success: false,
             message: "রেজিস্ট্রেশনে সমস্যা হয়েছে",
@@ -435,11 +447,20 @@ app.post("/api/register", async (req, res) => {
 
 
 // Login route
+// server.js-তে লগইন রাউট আপডেট করুন
 app.post("/api/login", async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        // Find user by email
+        // ভ্যালিডেশন
+        if (!email || !password) {
+            return res.status(400).json({ 
+                success: false,
+                message: "ইমেইল এবং পাসওয়ার্ড প্রয়োজন"
+            });
+        }
+
+        // ইউজার খুঁজুন
         const user = await User.findOne({ email });
         if (!user) {
             return res.status(401).json({ 
@@ -448,36 +469,41 @@ app.post("/api/login", async (req, res) => {
             });
         }
 
-        // Compare passwords
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
+        // পাসওয়ার্ড মিলাচ্ছে কিনা চেক
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        if (!isPasswordValid) {
             return res.status(401).json({ 
                 success: false,
                 message: "ইমেইল বা পাসওয়ার্ড ভুল"
             });
         }
 
-        // Generate JWT token
-        const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { 
-            expiresIn: "1d" 
-        });
+        // JWT টোকেন জেনারেট
+        const token = jwt.sign(
+            { userId: user._id, email: user.email },
+            process.env.JWT_SECRET,
+            { expiresIn: "1d" }
+        );
 
+        // সফল রেসপন্স
         res.json({
             success: true,
+            message: "লগইন সফল হয়েছে",
             token,
             user: {
                 id: user._id,
                 name: user.name,
                 email: user.email,
-                courses: user.courses
+                courses: user.courses || []
             }
         });
 
     } catch (error) {
-        console.error("Login error:", error);
+        console.error("লগইন এরর:", error);
         res.status(500).json({
             success: false,
-            message: "লগইনে সমস্যা হয়েছে"
+            message: "লগইনে সমস্যা হয়েছে",
+            error: error.message
         });
     }
 });
