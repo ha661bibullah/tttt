@@ -68,38 +68,9 @@ const Course = mongoose.model(
   }),
 )
 
-// মিডলওয়্যার
-app.use(cors())
-app.use(express.json())
 
-// ====== নতুন পেমেন্ট ভ্যালিডেশন মিডলওয়্যার ======
-const validatePayment = (req, res, next) => {
-  const { name, email, phone, courseId, paymentMethod, txnId, amount } = req.body
 
-  if (!name || !email || !phone || !courseId || !paymentMethod || !txnId || !amount) {
-    return res.status(400).json({ message: "সমস্ত প্রয়োজনীয় ফিল্ড পূরণ করুন" })
-  }
-
-  if (!["bkash", "nagad", "bank", "card"].includes(paymentMethod)) {
-    return res.status(400).json({ message: "অবৈধ পেমেন্ট মাধ্যম" })
-  }
-
-  next()
-}
-
-// ======= নতুন রাউট =======
-app.get("/api/users/:email/courses", async (req, res) => {
-  try {
-    const user = await User.findOne({ email: req.params.email })
-    if (!user) {
-      return res.status(404).json({ message: "User not found" })
-    }
-    res.json({ courses: user.courses || [] })
-  } catch (error) {
-    console.error("Error fetching user courses:", error)
-    res.status(500).json({ message: "Error fetching user courses" })
-  }
-})
+// Add these routes to your server.js
 
 // Password reset route
 app.post('/api/reset-password', async (req, res) => {
@@ -144,6 +115,39 @@ app.get('/api/users/:userId/courses', async (req, res) => {
         res.status(500).json({ message: 'Error fetching user courses' });
     }
 });
+
+// মিডলওয়্যার
+app.use(cors())
+app.use(express.json())
+
+// ====== নতুন পেমেন্ট ভ্যালিডেশন মিডলওয়্যার ======
+const validatePayment = (req, res, next) => {
+  const { name, email, phone, courseId, paymentMethod, txnId, amount } = req.body
+
+  if (!name || !email || !phone || !courseId || !paymentMethod || !txnId || !amount) {
+    return res.status(400).json({ message: "সমস্ত প্রয়োজনীয় ফিল্ড পূরণ করুন" })
+  }
+
+  if (!["bkash", "nagad", "bank", "card"].includes(paymentMethod)) {
+    return res.status(400).json({ message: "অবৈধ পেমেন্ট মাধ্যম" })
+  }
+
+  next()
+}
+
+// ======= নতুন রাউট =======
+app.get("/api/users/:email/courses", async (req, res) => {
+  try {
+    const user = await User.findOne({ email: req.params.email })
+    if (!user) {
+      return res.status(404).json({ message: "User not found" })
+    }
+    res.json({ courses: user.courses || [] })
+  } catch (error) {
+    console.error("Error fetching user courses:", error)
+    res.status(500).json({ message: "Error fetching user courses" })
+  }
+})
 
 // OTP রাউটস
 app.post("/api/send-otp", async (req, res) => {
@@ -338,6 +342,14 @@ app.put("/api/admin/payments/:id", async (req, res) => {
       error: error.message,
     })
   }
+})
+
+// server.js-তে নোটিফিকেশন ইভেন্ট যোগ করুন
+io.on("connection", (socket) => {
+  console.log("A user connected")
+  socket.on("disconnect", () => {
+    console.log("A user disconnected")
+  })
 })
 
 // কোর্স রাউটস
