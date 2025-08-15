@@ -2364,16 +2364,15 @@ async function verifyOTP(email, otp) {
             throw new Error(result.message || 'OTP যাচাই করতে সমস্যা হয়েছে');
         }
 
-        return result.success;
+        return true;
     } catch (error) {
-        console.error('Error verifying OTP:', error);
-        showNotification('error', error.message || 'OTP যাচাই করতে সমস্যা হয়েছে');
+        console.error('OTP verification error:', error);
+        showError('otpError', error.message || 'OTP যাচাই করতে সমস্যা হয়েছে');
         return false;
     } finally {
         hideLoading();
     }
-}
-        
+}    
 
 // ইউজার রেজিস্টার করুন
        // Registration function update
@@ -2402,18 +2401,27 @@ async function registerUser(name, email, password) {
         localStorage.setItem('authToken', result.token);
         localStorage.setItem('currentUser', JSON.stringify(result.user));
         
-        showNotification('রেজিস্ট্রেশন সফল হয়েছে!', 'success');
+        // Show success message and redirect to login
         document.getElementById('registrationSuccess').style.display = 'block';
+        toggleForm('login');
+        
         return true;
     } catch (error) {
         console.error('Registration error:', error);
-        showNotification(error.message || 'রেজিস্ট্রেশনে সমস্যা হয়েছে', 'error');
+        
+        // Handle specific error cases
+        if (error.message.includes('already exists')) {
+            showError('checkEmailError', 'এই ইমেইলটি ইতিমধ্যে ব্যবহার করা হয়েছে');
+        } else {
+            showNotification(error.message || 'রেজিস্ট্রেশনে সমস্যা হয়েছে', 'error');
+        }
         return false;
     } finally {
         hideLoading();
     }
 }
-        // লগইন ইউজার
+
+// লগইন ইউজার
         // Login function update
 async function loginUser(email, password) {
     showLoading();
@@ -2439,11 +2447,11 @@ async function loginUser(email, password) {
         localStorage.setItem('authToken', result.token);
         localStorage.setItem('currentUser', JSON.stringify(result.user));
         
+        // Update UI to show logged in state
         checkLoginStatus();
-        checkCourseAccess();
         
-        document.querySelector('.login-popup').classList.remove('active');
-        document.querySelector('.blur-overlay').classList.remove('active');
+        // Close login popup
+        closeLoginPopup();
         
         showNotification('সফলভাবে লগইন করা হয়েছে!', 'success');
         return true;
