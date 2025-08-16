@@ -7064,142 +7064,232 @@ let socket;
 </script>      
 
 <script>
-const COURSE_ID = 'practical-ibarat'; // Define course ID
 
-// Load reviews from database on page load
-async function loadReviews() {
-    try {
-        const response = await fetch(`/api/reviews/${COURSE_ID}`);
-        const data = await response.json();
-        
-        if (data.success && data.reviews.length > 0) {
-            const reviewsContainer = document.querySelector('.reviews-container');
-            
-            // Clear existing dynamic reviews (keep hardcoded ones)
-            const dynamicReviews = reviewsContainer.querySelectorAll('.review.dynamic');
-            dynamicReviews.forEach(review => review.remove());
-            
-            // Add database reviews
-            data.reviews.forEach(review => {
-                addReviewToDOM(review, true);
-            });
-        }
-    } catch (error) {
-        console.error('Error loading reviews:', error);
-    }
-}
-
-async function submitReview() {
-    const rating = document.getElementById('rating').value;
-    const reviewText = document.getElementById('reviewText').value.trim();
+const apiHelper = {
+    baseURL: 'https://tttt-tbz0.onrender.com/api',
     
-    // Get user info from localStorage or session
-    const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
-    const reviewerName = userInfo.name || 'Anonymous User';
-    const reviewerEmail = userInfo.email || 'anonymous@example.com';
-    
-    if (!rating) {
-        alert('অনুগ্রহ করে রেটিং নির্বাচন করুন');
-        return;
-    }
-    
-    if (!reviewText) {
-        alert('অনুগ্রহ করে রিভিউ লিখুন');
-        return;
-    }
-    
-    try {
-        // Show loading state
-        const submitButton = document.querySelector('.submit-review');
-        const originalText = submitButton.textContent;
-        submitButton.textContent = 'জমা দেওয়া হচ্ছে...';
-        submitButton.disabled = true;
-        
-        // Submit to database
-        const response = await fetch('/api/reviews', {
-            method: 'POST',
+    async makeRequest(endpoint, options = {}) {
+        const url = `${this.baseURL}${endpoint}`;
+        const defaultOptions = {
             headers: {
                 'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                courseId: COURSE_ID,
-                reviewerName,
-                reviewerEmail,
-                rating: parseInt(rating),
-                reviewText
-            })
-        });
+                'Accept': 'application/json'
+            }
+        };
         
-        const data = await response.json();
+        const finalOptions = { ...defaultOptions, ...options };
         
-        if (data.success) {
-            // Show success message
-            alert('রিভিউ সফলভাবে জমা দেওয়া হয়েছে! অনুমোদনের পর প্রকাশিত হবে।');
+        try {
+            console.log(`Making request to: ${url}`, finalOptions);
             
-            // Clear form
-            document.getElementById('rating').value = '';
-            document.getElementById('reviewText').value = '';
+            const response = await fetch(url, finalOptions);
             
-            // Hide form
-            document.getElementById('reviewForm').classList.add('hidden');
-        } else {
-            alert(data.message || 'রিভিউ জমা দিতে সমস্যা হয়েছে');
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error(`Server returned non-JSON response: ${contentType}`);
+            }
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.message || `HTTP error! status: ${response.status}`);
+            }
+            
+            return data;
+        } catch (error) {
+            console.error(`API Error for ${endpoint}:`, error);
+            
+            if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                throw new Error('নেটওয়ার্ক সংযোগে সমস্যা। ইন্টারনেট সংযোগ চেক করুন।');
+            } else if (error.message.includes('non-JSON response')) {
+                throw new Error('সার্ভার থেকে ভুল ধরনের রেসপন্স এসেছে। পেইজ রিফ্রেশ করে আবার চেষ্টা করুন।');
+            } else {
+                throw error;
+            }
+        }
+    }
+};
+
+const ReviewSystem = {
+    async loadReviews(courseId) {
+        try {
+            console.log(`Loading reviews for course: ${courseId}`);
+            
+            const data = await apiHelper.makeRequest(`/reviews/${courseId}`);
+            
+            if (data.success && Array.isArray(data.reviews)) {
+                this.displayReviews(data.reviews);
+                return data.reviews;
+            } else {
+                throw new Error('রিভিউ ডেটা সঠিক ফরম্যাটে নেই');
+            }
+        } catch (error) {
+            console.error('Error loading reviews:', error);
+            this.showReviewError('রিভিউ লোড করতে সমস্যা হয়েছে: ' + error.message);
+            return [];
+        }
+    },
+    
+    async submitReview(reviewData) {
+        try {
+            console.log('Submitting review:', reviewData);
+            
+            if (!reviewData.courseId || !reviewData.reviewerName || !reviewData.reviewerEmail || 
+                !reviewData.rating || !reviewData.reviewText) {
+                throw new Error('সমস্ত প্রয়োজনীয় ফিল্ড পূরণ করুন');
+            }
+            
+            if (reviewData.rating < 1 || reviewData.rating > 5) {
+                throw new Error('রেটিং ১ থেকে ৫ এর মধ্যে হতে হবে');
+            }
+            
+            const data = await apiHelper.makeRequest('/reviews', {
+                method: 'POST',
+                body: JSON.stringify(reviewData)
+            });
+            
+            if (data.success) {
+                this.showReviewSuccess(data.message);
+                this.clearReviewForm();
+                // Reload reviews after successful submission
+                setTimeout(() => {
+                    this.loadReviews(reviewData.courseId);
+                }, 1000);
+                return true;
+            } else {
+                throw new Error(data.message || 'রিভিউ জমা দিতে সমস্যা হয়েছে');
+            }
+        } catch (error) {
+            console.error('Error submitting review:', error);
+            this.showReviewError('রিভিউ জমা দিতে সমস্যা হয়েছে: ' + error.message);
+            return false;
+        }
+    },
+    
+    displayReviews(reviews) {
+        const reviewsContainer = document.getElementById('reviewsContainer');
+        if (!reviewsContainer) return;
+        
+        if (reviews.length === 0) {
+            reviewsContainer.innerHTML = '<p class="no-reviews">এখনো কোন রিভিউ নেই। প্রথম রিভিউ দিন!</p>';
+            return;
         }
         
-        // Restore button
-        submitButton.textContent = originalText;
-        submitButton.disabled = false;
-        
-    } catch (error) {
-        console.error('Error submitting review:', error);
-        alert('রিভিউ জমা দিতে সমস্যা হয়েছে');
-        
-        // Restore button
-        const submitButton = document.querySelector('.submit-review');
-        submitButton.textContent = 'রিভিউ জমা দিন';
-        submitButton.disabled = false;
-    }
-}
-
-function addReviewToDOM(review, isDynamic = false) {
-    const reviewsContainer = document.querySelector('.reviews-container');
-    
-    // Create star rating
-    const stars = '⭐'.repeat(review.rating);
-    
-    // Format date
-    const reviewDate = new Date(review.date);
-    const formattedDate = reviewDate.toLocaleDateString('bn-BD', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-    });
-    
-    // Get first letter for avatar
-    const avatarLetter = review.reviewerName.charAt(0).toUpperCase();
-    
-    const reviewHTML = `
-        <div class="review ${isDynamic ? 'dynamic' : ''}">
-            <div class="review-header">
-                <div class="reviewer-avatar">${avatarLetter}</div>
-                <div>
-                    <div class="reviewer-name">${review.reviewerName}</div>
-                    <div class="star-rating">${stars}</div>
+        const reviewsHTML = reviews.map(review => `
+            <div class="review-item">
+                <div class="review-header">
+                    <h4>${this.escapeHtml(review.reviewerName)}</h4>
+                    <div class="rating">
+                        ${'★'.repeat(review.rating)}${'☆'.repeat(5 - review.rating)}
+                    </div>
+                    <span class="review-date">${new Date(review.date).toLocaleDateString('bn-BD')}</span>
                 </div>
-                <div class="review-date">${formattedDate}</div>
+                <p class="review-text">${this.escapeHtml(review.reviewText)}</p>
             </div>
-            <div class="review-text">${review.reviewText}</div>
-        </div>
-    `;
+        `).join('');
+        
+        reviewsContainer.innerHTML = reviewsHTML;
+    },
     
-    // Insert at the beginning (after hardcoded reviews)
-    const firstReview = reviewsContainer.querySelector('.review');
-    if (firstReview) {
-        firstReview.insertAdjacentHTML('beforebegin', reviewHTML);
-    } else {
-        reviewsContainer.innerHTML = reviewHTML;
+    showReviewError(message) {
+        const errorContainer = document.getElementById('reviewError');
+        if (errorContainer) {
+            errorContainer.textContent = message;
+            errorContainer.style.display = 'block';
+            errorContainer.style.color = '#dc3545';
+            errorContainer.style.padding = '10px';
+            errorContainer.style.backgroundColor = '#f8d7da';
+            errorContainer.style.border = '1px solid #f5c6cb';
+            errorContainer.style.borderRadius = '4px';
+            errorContainer.style.marginBottom = '15px';
+        } else {
+            alert(message);
+        }
+    },
+    
+    showReviewSuccess(message) {
+        const successContainer = document.getElementById('reviewSuccess');
+        if (successContainer) {
+            successContainer.textContent = message;
+            successContainer.style.display = 'block';
+            successContainer.style.color = '#155724';
+            successContainer.style.padding = '10px';
+            successContainer.style.backgroundColor = '#d4edda';
+            successContainer.style.border = '1px solid #c3e6cb';
+            successContainer.style.borderRadius = '4px';
+            successContainer.style.marginBottom = '15px';
+            
+            // Hide success message after 5 seconds
+            setTimeout(() => {
+                successContainer.style.display = 'none';
+            }, 5000);
+        } else {
+            alert(message);
+        }
+    },
+    
+    clearReviewForm() {
+        const form = document.getElementById('reviewForm');
+        if (form) {
+            form.reset();
+            // Clear any error messages
+            const errorContainer = document.getElementById('reviewError');
+            if (errorContainer) {
+                errorContainer.style.display = 'none';
+            }
+        }
+    },
+    
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
-}
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+    
+    // Initialize review system
+    const courseId = 'practical-ibarat'; // Replace with actual course ID
+    ReviewSystem.loadReviews(courseId);
+    
+    const reviewForm = document.getElementById('reviewForm');
+    if (reviewForm) {
+        reviewForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Hide previous messages
+            const errorContainer = document.getElementById('reviewError');
+            const successContainer = document.getElementById('reviewSuccess');
+            if (errorContainer) errorContainer.style.display = 'none';
+            if (successContainer) successContainer.style.display = 'none';
+            
+            // Get form data
+            const formData = new FormData(this);
+            const reviewData = {
+                courseId: courseId,
+                reviewerName: formData.get('reviewerName')?.trim(),
+                reviewerEmail: formData.get('reviewerEmail')?.trim(),
+                rating: parseInt(formData.get('rating')),
+                reviewText: formData.get('reviewText')?.trim()
+            };
+            
+            // Submit review
+            const submitButton = this.querySelector('button[type="submit"]');
+            const originalText = submitButton.textContent;
+            submitButton.textContent = 'জমা দেওয়া হচ্ছে...';
+            submitButton.disabled = true;
+            
+            try {
+                await ReviewSystem.submitReview(reviewData);
+            } finally {
+                submitButton.textContent = originalText;
+                submitButton.disabled = false;
+            }
+        });
+    }
+});
+
 </script>
 
 
