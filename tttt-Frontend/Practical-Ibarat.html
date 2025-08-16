@@ -4252,6 +4252,25 @@ window.togglePasswordVisibility = function(inputId, toggleId) {
         .locked-overlay {
             display: none !important;
         }
+
+
+
+
+        /* Dynamic reviews styling */
+.review.dynamic-review {
+    animation: fadeIn 0.5s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Make sure static reviews are distinct */
+.review.static-review {
+    background-color: rgba(94, 53, 177, 0.05);
+    border-left: 3px solid var(--primary-color);
+}
 </style>        
 <div class="container2">
         <header>
@@ -4406,62 +4425,25 @@ window.togglePasswordVisibility = function(inputId, toggleId) {
                 
                 <div id="reviews" class="tab-content">
                     <div class="reviews-container">
-                        <div class="review">
-                            <div class="review-header">
-                                <div class="reviewer-avatar">আ</div>
-                                <div>
-                                    <div class="reviewer-name">আবু বকর সিদ্দিক</div>
-                                    <div class="star-rating">⭐⭐⭐⭐⭐</div>
-                                </div>
-                                <div class="review-date">২০ দিন আগে</div>
-                            </div>
-                            <div class="review-text">
-                                অসাধারণ কোর্স! মাওলানা মুনতাহা আহমদ সাহেবের শিক্ষা পদ্ধতি অত্যন্ত কার্যকর। আমি এখন আরবি ইবারত সহজেই পড়তে ও বুঝতে পারি। আল্লাহ তাঁর উত্তম প্রতিদান দিন।
-                            </div>
-                        </div>
-                        
-                        <div class="review">
-                            <div class="review-header">
-                                <div class="reviewer-avatar">ম</div>
-                                <div>
-                                    <div class="reviewer-name">মুহাম্মদ কাসেম</div>
-                                    <div class="star-rating">⭐⭐⭐⭐⭐</div>
-                                </div>
-                                <div class="review-date">১৫ দিন আগে</div>
-                            </div>
-                            <div class="review-text">
-                                দীর্ঘদিন ধরে আরবি ইবারত নিয়ে সমস্যায় ছিলাম। এই কোর্সটি আমার সমস্যার সমাধান করে দিয়েছে। প্রতিটি লেসন অত্যন্ত সুন্দরভাবে সাজানো।
-                            </div>
-                        </div>
-                        
-                        <div class="review">
-                            <div class="review-header">
-                                <div class="reviewer-avatar">ফ</div>
-                                <div>
-                                    <div class="reviewer-name">ফাতিমা খাতুন</div>
-                                    <div class="star-rating">⭐⭐⭐⭐⭐</div>
-                                </div>
-                                <div class="review-date">১০ দিন আগে</div>
-                            </div>
-                            <div class="review-text">
-                                মা হিসেবে আমি আমার সন্তানদের আরবি শেখাতে চাইছিলাম। এই কোর্সটি আমাকে সেই যোগ্যতা দিয়েছে। খুবই উপকারী কোর্স।
-                            </div>
-                        </div>
-                        
-                        <div class="review">
-                            <div class="review-header">
-                                <div class="reviewer-avatar">আ</div>
-                                <div>
-                                    <div class="reviewer-name">আব্দুল্লাহ আল মামুন</div>
-                                    <div class="star-rating">⭐⭐⭐⭐⭐</div>
-                                </div>
-                                <div class="review-date">৫ দিন আগে</div>
-                            </div>
-                            <div class="review-text">
-                                মাদরাসার শিক্ষক হিসেবে এই কোর্সটি আমার শিক্ষকতার মান অনেক বৃদ্ধি করেছে। ছাত্রদের কাছে এখন আরো সহজভাবে বিষয়টি উপস্থাপন করতে পারি।
-                            </div>
-                        </div>
-                    </div>
+    <!-- Static reviews (sample data) -->
+    <div class="review static-review">
+        <div class="review-header">
+            <div class="reviewer-avatar">আ</div>
+            <div>
+                <div class="reviewer-name">আবু বকর সিদ্দিক</div>
+                <div class="star-rating">⭐⭐⭐⭐⭐</div>
+            </div>
+            <div class="review-date">২০ দিন আগে</div>
+        </div>
+        <div class="review-text">
+            অসাধারণ কোর্স! মাওলানা মুনতাহা আহমদ সাহেবের শিক্ষা পদ্ধতি অত্যন্ত কার্যকর। আমি এখন আরবি ইবারত সহজেই পড়তে ও বুঝতে পারি। আল্লাহ তাঁর উত্তম প্রতিদান দিন।
+        </div>
+    </div>
+    
+    <!-- More static reviews... -->
+    
+    <!-- Dynamic reviews will be inserted here by JavaScript -->
+</div>
                     
                    <div class="review-form hidden" id="reviewForm">
     <h3>আপনার রিভিউ লিখুন</h3>
@@ -5507,19 +5489,22 @@ async function submitReview() {
 
         const result = await response.json();
         
-        if (!response.ok) {
-            throw new Error(result.message || 'রিভিউ জমা দিতে সমস্যা হয়েছে');
-        }
-
+        if (response.ok) {
         showNotification('success', 'আপনার রিভিউ জমা দেওয়া হয়েছে! অনুমোদনের পর প্রকাশিত হবে।');
+        
+        // Clear form
         document.getElementById('reviewText').value = '';
         document.getElementById('rating').value = '';
-        
+
+         // Reload reviews after submission
+        await loadReviews();
+        }  
     } catch (error) {
         console.error('Error submitting review:', error);
         showNotification('error', error.message || 'রিভিউ জমা দিতে সমস্যা হয়েছে');
     }
 }
+
 // UI-তে রিভিউ যোগ করুন
 
 // UI-তে রিভিউ যোগ করুন
@@ -6552,7 +6537,6 @@ function convertAlertsToPopups() {
 
 // পেজ লোড হলে পপআপ সিস্টেম ইনিশিয়ালাইজ করুন
 document.addEventListener('DOMContentLoaded', function() {
-    loadReviews();
     convertAlertsToPopups();
     
     // সকল alert() কে রিপ্লেস করুন
@@ -7296,7 +7280,7 @@ const ReviewSystem = {
 };
 
 document.addEventListener('DOMContentLoaded', function() {
-    
+    loadReviews();
     // Initialize review system
     const courseId = 'practical-ibarat'; // Replace with actual course ID
     ReviewSystem.loadReviews(courseId);
@@ -7344,25 +7328,31 @@ async function loadReviews() {
         const response = await fetch('https://tttt-tbz0.onrender.com/api/reviews/practical-ibarot');
         const result = await response.json();
         
+        const reviewsContainer = document.querySelector('.reviews-container');
+        
+        // Clear only existing dynamic reviews (keep the first 4 static reviews)
+        const dynamicReviews = document.querySelectorAll('.review.dynamic-review');
+        dynamicReviews.forEach(review => review.remove());
+        
         if (response.ok && result.reviews && result.reviews.length > 0) {
-            const reviewsContainer = document.querySelector('.reviews-container');
-            reviewsContainer.innerHTML = ''; // Clear existing reviews
-            
             result.reviews.forEach(review => {
-                const reviewElement = document.createElement('div');
-                reviewElement.className = 'review';
-                reviewElement.innerHTML = `
-                    <div class="review-header">
-                        <div class="reviewer-avatar">${review.reviewerName.charAt(0)}</div>
-                        <div>
-                            <div class="reviewer-name">${review.reviewerName}</div>
-                            <div class="star-rating">${'⭐'.repeat(review.rating)}</div>
+                // Only add reviews that are not already in the static content
+                if (!isStaticReview(review)) {
+                    const reviewElement = document.createElement('div');
+                    reviewElement.className = 'review dynamic-review';
+                    reviewElement.innerHTML = `
+                        <div class="review-header">
+                            <div class="reviewer-avatar">${review.reviewerName.charAt(0)}</div>
+                            <div>
+                                <div class="reviewer-name">${review.reviewerName}</div>
+                                <div class="star-rating">${'⭐'.repeat(review.rating)}</div>
+                            </div>
+                            <div class="review-date">${formatDate(review.date)}</div>
                         </div>
-                        <div class="review-date">${new Date(review.date).toLocaleDateString()}</div>
-                    </div>
-                    <div class="review-text">${review.reviewText}</div>
-                `;
-                reviewsContainer.appendChild(reviewElement);
+                        <div class="review-text">${review.reviewText}</div>
+                    `;
+                    reviewsContainer.appendChild(reviewElement);
+                }
             });
         }
     } catch (error) {
@@ -7370,6 +7360,24 @@ async function loadReviews() {
     }
 }
 
+// Helper function to check if a review exists in static content
+function isStaticReview(review) {
+    const staticReviewers = ['আবু বকর সিদ্দিক', 'মুহাম্মদ কাসেম', 'ফাতিমা খাতুন', 'আব্দুল্লাহ আল মামুন'];
+    return staticReviewers.includes(review.reviewerName);
+}
+
+// Helper function to format date
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'আজ';
+    if (diffDays === 1) return 'গতকাল';
+    if (diffDays < 7) return `${diffDays} দিন আগে`;
+    if (diffDays < 30) return `${Math.floor(diffDays/7)} সপ্তাহ আগে`;
+    return `${Math.floor(diffDays/30)} মাস আগে`;
+}
 // Load reviews when page loads
 document.addEventListener('DOMContentLoaded', loadReviews);
 
