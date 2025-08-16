@@ -4252,22 +4252,6 @@ window.togglePasswordVisibility = function(inputId, toggleId) {
         .locked-overlay {
             display: none !important;
         }
-
-        /* Dynamic reviews styling */
-.review.dynamic-review {
-    animation: fadeIn 0.5s ease;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-/* Make sure static reviews are distinct */
-.review.static-review {
-    background-color: rgba(94, 53, 177, 0.05);
-    border-left: 3px solid var(--primary-color);
-}
 </style>        
 <div class="container2">
         <header>
@@ -5523,25 +5507,19 @@ async function submitReview() {
 
         const result = await response.json();
         
-        if (response.ok) {
-            showNotification('success', 'আপনার রিভিউ জমা দেওয়া হয়েছে! অনুমোদনের পর প্রকাশিত হবে।');
-            
-            // Clear form
-            document.getElementById('reviewText').value = '';
-            document.getElementById('rating').value = '';
-            
-            // Reload reviews after submission
-            await loadReviews();
-        } else {
-            showNotification('error', result.message || 'রিভিউ জমা দিতে সমস্যা হয়েছে');
+        if (!response.ok) {
+            throw new Error(result.message || 'রিভিউ জমা দিতে সমস্যা হয়েছে');
         }
+
+        showNotification('success', 'আপনার রিভিউ জমা দেওয়া হয়েছে! অনুমোদনের পর প্রকাশিত হবে।');
+        document.getElementById('reviewText').value = '';
+        document.getElementById('rating').value = '';
         
     } catch (error) {
         console.error('Error submitting review:', error);
         showNotification('error', error.message || 'রিভিউ জমা দিতে সমস্যা হয়েছে');
     }
 }
-
 // UI-তে রিভিউ যোগ করুন
 
 // UI-তে রিভিউ যোগ করুন
@@ -6574,6 +6552,7 @@ function convertAlertsToPopups() {
 
 // পেজ লোড হলে পপআপ সিস্টেম ইনিশিয়ালাইজ করুন
 document.addEventListener('DOMContentLoaded', function() {
+    loadReviews();
     convertAlertsToPopups();
     
     // সকল alert() কে রিপ্লেস করুন
@@ -7317,7 +7296,7 @@ const ReviewSystem = {
 };
 
 document.addEventListener('DOMContentLoaded', function() {
-    loadReviews();
+    
     // Initialize review system
     const courseId = 'practical-ibarat'; // Replace with actual course ID
     ReviewSystem.loadReviews(courseId);
