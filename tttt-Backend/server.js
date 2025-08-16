@@ -77,7 +77,7 @@ const Review = mongoose.model(
     rating: { type: Number, required: true, min: 1, max: 5 },
     reviewText: { type: String, required: true },
     date: { type: Date, default: Date.now },
-    isApproved: { type: Boolean, default: true }, // Admin approval required
+    isApproved: { type: Boolean, default: false }, // Admin approval required
   }),
 )
 
@@ -422,12 +422,10 @@ app.get("/api/reviews/:courseId", async (req, res) => {
       isApproved: true,
     }).sort({ date: -1 })
 
-    res.setHeader("Content-Type", "application/json")
     res.json({ success: true, reviews })
   } catch (error) {
     console.error("Error fetching reviews:", error)
-    res.setHeader("Content-Type", "application/json")
-    res.status(500).json({ success: false, message: "রিভিউ লোড করতে সমস্যা হয়েছে", error: error.message })
+    res.status(500).json({ success: false, message: "রিভিউ লোড করতে সমস্যা হয়েছে" })
   }
 })
 
@@ -436,17 +434,11 @@ app.post("/api/reviews", async (req, res) => {
   try {
     const { courseId, reviewerName, reviewerEmail, rating, reviewText } = req.body
 
+    // Validation
     if (!courseId || !reviewerName || !reviewerEmail || !rating || !reviewText) {
       return res.status(400).json({
         success: false,
         message: "সমস্ত প্রয়োজনীয় ফিল্ড পূরণ করুন",
-        missingFields: {
-          courseId: !courseId,
-          reviewerName: !reviewerName,
-          reviewerEmail: !reviewerEmail,
-          rating: !rating,
-          reviewText: !reviewText,
-        },
       })
     }
 
@@ -475,32 +467,22 @@ app.post("/api/reviews", async (req, res) => {
       courseId,
       reviewerName,
       reviewerEmail,
-      rating: Number.parseInt(rating),
+      rating,
       reviewText,
     })
 
     await review.save()
 
-    res.setHeader("Content-Type", "application/json")
     res.status(201).json({
       success: true,
       message: "রিভিউ সফলভাবে জমা দেওয়া হয়েছে। অনুমোদনের পর প্রকাশিত হবে।",
-      review: {
-        id: review._id,
-        courseId: review.courseId,
-        reviewerName: review.reviewerName,
-        rating: review.rating,
-        reviewText: review.reviewText,
-        date: review.date,
-      },
+      review,
     })
   } catch (error) {
     console.error("Error submitting review:", error)
-    res.setHeader("Content-Type", "application/json")
     res.status(500).json({
       success: false,
       message: "রিভিউ জমা দিতে সমস্যা হয়েছে",
-      error: error.message,
     })
   }
 })
@@ -709,25 +691,6 @@ async function sendCourseAccessEmail(email, name, courseName) {
 //     console.log("A user disconnected")
 //   })
 // })
-
-app.use("*", (req, res) => {
-  res.setHeader("Content-Type", "application/json")
-  res.status(404).json({
-    success: false,
-    message: "API endpoint পাওয়া যায়নি",
-    path: req.originalUrl,
-  })
-})
-
-app.use((error, req, res, next) => {
-  console.error("Global error handler:", error)
-  res.setHeader("Content-Type", "application/json")
-  res.status(500).json({
-    success: false,
-    message: "সার্ভার এরর হয়েছে",
-    error: process.env.NODE_ENV === "development" ? error.message : "Internal server error",
-  })
-})
 
 // সার্ভার শুরু করুন
 const PORT = process.env.PORT || 5000
