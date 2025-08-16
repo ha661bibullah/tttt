@@ -4254,8 +4254,6 @@ window.togglePasswordVisibility = function(inputId, toggleId) {
         }
 
 
-
-
         /* Dynamic reviews styling */
 .review.dynamic-review {
     animation: fadeIn 0.5s ease;
@@ -5490,15 +5488,18 @@ async function submitReview() {
         const result = await response.json();
         
         if (response.ok) {
-        showNotification('success', 'আপনার রিভিউ জমা দেওয়া হয়েছে! অনুমোদনের পর প্রকাশিত হবে।');
+            showNotification('success', 'আপনার রিভিউ জমা দেওয়া হয়েছে! অনুমোদনের পর প্রকাশিত হবে।');
+            
+            // Clear form
+            document.getElementById('reviewText').value = '';
+            document.getElementById('rating').value = '';
+            
+            // Reload reviews after submission
+            await loadReviews();
+        } else {
+            showNotification('error', result.message || 'রিভিউ জমা দিতে সমস্যা হয়েছে');
+        }
         
-        // Clear form
-        document.getElementById('reviewText').value = '';
-        document.getElementById('rating').value = '';
-
-         // Reload reviews after submission
-        await loadReviews();
-        }  
     } catch (error) {
         console.error('Error submitting review:', error);
         showNotification('error', error.message || 'রিভিউ জমা দিতে সমস্যা হয়েছে');
