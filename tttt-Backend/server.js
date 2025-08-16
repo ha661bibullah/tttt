@@ -97,10 +97,7 @@ app.post("/api/forgot-password", async (req, res) => {
     // Check if user exists
     const user = await User.findOne({ email })
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "এই ইমেইলটি রেজিস্টার্ড নয়। প্রথমে নতুন একাউন্ট খুলুন।",
-      })
+      return res.status(404).json({ success: false, message: "এই ইমেইলটি রেজিস্টার্ড নয়" })
     }
 
     // Generate OTP
@@ -124,12 +121,12 @@ app.post("/api/forgot-password", async (req, res) => {
 
     await transporter.sendMail(mailOptions)
 
-    // Save OTP to existing user
+    // Save OTP to user
     user.otp = otp
     user.otpExpires = Date.now() + 300000 // 5 minutes
     await user.save()
 
-    res.json({ success: true, message: "পাসওয়ার্ড রিসেট OTP সফলভাবে পাঠানো হয়েছে" })
+    res.json({ success: true, message: "OTP সফলভাবে পাঠানো হয়েছে" })
   } catch (error) {
     console.error("Error in forgot password:", error)
     res.status(500).json({ success: false, message: "পাসওয়ার্ড রিসেট করতে সমস্যা হয়েছে" })
@@ -162,7 +159,6 @@ app.post("/api/reset-password", async (req, res) => {
   }
 })
 
-// User courses route
 app.get("/api/users/:email/courses", async (req, res) => {
   try {
     const user = await User.findOne({ email: req.params.email })
@@ -176,20 +172,10 @@ app.get("/api/users/:email/courses", async (req, res) => {
   }
 })
 
-// OTP routes for registration
-app.post("/api/send-registration-otp", async (req, res) => {
+// OTP রাউটস
+app.post("/api/send-otp", async (req, res) => {
   try {
     const { email } = req.body
-
-    // Check if user already exists
-    const existingUser = await User.findOne({ email })
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: "এই ইমেইল দিয়ে ইতিমধ্যে একাউন্ট রয়েছে। লগইন করুন অথবা পাসওয়ার্ড রিসেট করুন।",
-      })
-    }
-
     const otp = Math.floor(1000 + Math.random() * 9000).toString()
 
     const transporter = nodemailer.createTransport({
@@ -203,51 +189,53 @@ app.post("/api/send-registration-otp", async (req, res) => {
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: email,
-      subject: "তালিমুল ইসলাম একাডেমি - নতুন একাউন্ট OTP কোড",
-      text: `আপনার নতুন একাউন্ট তৈরির জন্য OTP কোড: ${otp}`,
+      subject: "তালিমুল ইসলাম একাডেমি - OTP কোড",
+      text: `আপনার OTP কোড: ${otp}`,
     }
 
     await transporter.sendMail(mailOptions)
 
-    // Store OTP temporarily for new users
-    global.tempOTPs = global.tempOTPs || {}
-    global.tempOTPs[email] = {
-      otp,
-      expires: Date.now() + 300000,
-      type: "registration",
+    // শুধুমাত্র existing user-এর জন্য OTP update করা হবে
+    const user = await User.findOne({ email })
+    if (user) {
+      user.otp = otp
+      user.otpExpires = Date.now() + 300000
+      await user.save()
+    }
+    // নতুন user-এর জন্য আলাদা OTP storage তৈরি করা হবে
+    else {
+      // Temporary OTP storage for new users (you can also use a separate collection)
+      global.tempOTPs = global.tempOTPs || {}
+      global.tempOTPs[email] = {
+        otp,
+        expires: Date.now() + 300000,
+      }
     }
 
-    res.json({ success: true, message: "নতুন একাউন্টের জন্য OTP সফলভাবে পাঠানো হয়েছে" })
+    res.json({ success: true, message: "OTP সফলভাবে পাঠানো হয়েছে" })
   } catch (error) {
-    console.error("Error sending registration OTP:", error)
+    console.error("Error sending OTP:", error)
     res.status(500).json({ success: false, message: "OTP পাঠাতে সমস্যা হয়েছে" })
   }
 })
 
 app.post("/api/verify-otp", async (req, res) => {
   try {
-    const { email, otp, type } = req.body // Added type parameter
+    const { email, otp } = req.body
 
-    let storedOTP,
-      otpExpires,
-      isPasswordReset = false
+    const user = await User.findOne({ email })
+    let storedOTP, otpExpires
 
-    if (type === "password-reset") {
-      // For password reset - check existing user
-      const user = await User.findOne({ email })
-      if (!user || !user.otp) {
-        return res.status(400).json({ success: false, message: "OTP পাওয়া যায়নি" })
-      }
+    if (user && user.otp) {
+      // Existing user with OTP
       storedOTP = user.otp
       otpExpires = user.otpExpires
-      isPasswordReset = true
-    } else {
-      // For registration - check temporary storage
-      if (!global.tempOTPs || !global.tempOTPs[email]) {
-        return res.status(400).json({ success: false, message: "OTP পাওয়া যায়নি" })
-      }
+    } else if (global.tempOTPs && global.tempOTPs[email]) {
+      // New user with temporary OTP
       storedOTP = global.tempOTPs[email].otp
       otpExpires = global.tempOTPs[email].expires
+    } else {
+      return res.status(400).json({ success: false, message: "OTP পাওয়া যায়নি" })
     }
 
     if (storedOTP !== otp) {
@@ -259,12 +247,11 @@ app.post("/api/verify-otp", async (req, res) => {
     }
 
     // Clear OTP after successful verification
-    if (isPasswordReset) {
-      const user = await User.findOne({ email })
+    if (user) {
       user.otp = undefined
       user.otpExpires = undefined
       await user.save()
-    } else {
+    } else if (global.tempOTPs && global.tempOTPs[email]) {
       delete global.tempOTPs[email]
     }
 
@@ -275,7 +262,7 @@ app.post("/api/verify-otp", async (req, res) => {
   }
 })
 
-// Payment routes (middleware included)
+// পেমেন্ট রাউটস (মিডলওয়্যার যুক্ত করা হয়েছে)
 app.post("/api/payments", validatePayment, async (req, res) => {
   try {
     const payment = new Payment(req.body)
