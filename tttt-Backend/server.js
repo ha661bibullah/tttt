@@ -103,6 +103,7 @@ const validatePayment = (req, res, next) => {
 // ======= নতুন রাউট =======
 
 // Password reset routes
+// Password reset routes
 app.post("/api/forgot-password", async (req, res) => {
   try {
     const { email } = req.body
@@ -143,6 +144,32 @@ app.post("/api/forgot-password", async (req, res) => {
   } catch (error) {
     console.error("Error in forgot password:", error)
     res.status(500).json({ success: false, message: "পাসওয়ার্ড রিসেট করতে সমস্যা হয়েছে" })
+  }
+})
+
+app.post("/api/reset-password", async (req, res) => {
+  try {
+    const { email, newPassword } = req.body
+
+    // Find user
+    const user = await User.findOne({ email })
+    if (!user) {
+      return res.status(404).json({ success: false, message: "ব্যবহারকারী পাওয়া যায়নি" })
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10)
+
+    // Update password
+    user.password = hashedPassword
+    user.otp = undefined
+    user.otpExpires = undefined
+    await user.save()
+
+    res.json({ success: true, message: "পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে" })
+  } catch (error) {
+    console.error("Error resetting password:", error)
+    res.status(500).json({ success: false, message: "পাসওয়ার্ড পরিবর্তনে সমস্যা হয়েছে" })
   }
 })
 
