@@ -124,7 +124,22 @@ app.post("/api/send-otp", async (req, res) => {
 
     await transporter.sendMail(mailOptions)
 
-    await User.findOneAndUpdate({ email }, { otp, otpExpires: Date.now() + 300000 }, { upsert: true, new: true })
+    // শুধুমাত্র existing user-এর জন্য OTP update করা হবে
+    const user = await User.findOne({ email })
+    if (user) {
+      user.otp = otp
+      user.otpExpires = Date.now() + 300000
+      await user.save()
+    }
+    // নতুন user-এর জন্য আলাদা OTP storage তৈরি করা হবে
+    else {
+      // Temporary OTP storage for new users (you can also use a separate collection)
+      global.tempOTPs = global.tempOTPs || {}
+      global.tempOTPs[email] = {
+        otp,
+        expires: Date.now() + 300000,
+      }
+    }
 
     res.json({ success: true, message: "OTP সফলভাবে পাঠানো হয়েছে" })
   } catch (error) {
@@ -138,18 +153,36 @@ app.post("/api/verify-otp", async (req, res) => {
     const { email, otp } = req.body
 
     const user = await User.findOne({ email })
+    let storedOTP, otpExpires
 
-    if (!user || user.otp !== otp) {
+    if (user && user.otp) {
+      // Existing user with OTP
+      storedOTP = user.otp
+      otpExpires = user.otpExpires
+    } else if (global.tempOTPs && global.tempOTPs[email]) {
+      // New user with temporary OTP
+      storedOTP = global.tempOTPs[email].otp
+      otpExpires = global.tempOTPs[email].expires
+    } else {
+      return res.status(400).json({ success: false, message: "OTP পাওয়া যায়নি" })
+    }
+
+    if (storedOTP !== otp) {
       return res.status(400).json({ success: false, message: "অবৈধ OTP" })
     }
 
-    if (user.otpExpires < Date.now()) {
+    if (otpExpires < Date.now()) {
       return res.status(400).json({ success: false, message: "OTP এর মেয়াদ শেষ হয়ে গেছে" })
     }
 
-    user.otp = undefined
-    user.otpExpires = undefined
-    await user.save()
+    // Clear OTP after successful verification
+    if (user) {
+      user.otp = undefined
+      user.otpExpires = undefined
+      await user.save()
+    } else if (global.tempOTPs && global.tempOTPs[email]) {
+      delete global.tempOTPs[email]
+    }
 
     res.json({ success: true })
   } catch (error) {
@@ -444,12 +477,12 @@ async function sendCourseAccessEmail(email, name, courseName) {
 }
 
 // WebSocket কানেকশন
-io.on("connection", (socket) => {
-  console.log("A user connected")
-  socket.on("disconnect", () => {
-    console.log("A user disconnected")
-  })
-})
+// io.on("connection", (socket) => {
+//   console.log("A user connected")
+//   socket.on("disconnect", () => {
+//     console.log("A user disconnected")
+//   })
+// })
 
 // সার্ভার শুরু করুন
 const PORT = process.env.PORT || 5000
