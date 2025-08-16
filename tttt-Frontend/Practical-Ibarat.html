@@ -5470,69 +5470,56 @@ function activateCourse() {
 }
 
 // Show notification
-function showNotification(type, message) {
-    const notification = document.createElement('div');
-    notification.className = `notification ${type}`;
-    notification.textContent = message;
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        notification.classList.add('fade-out');
-        setTimeout(() => notification.remove(), 500);
-    }, 3000);
-}
 
 // Submit review to backend
 // রিভিউ সাবমিট ফাংশন
 // রিভিউ সাবমিট ফাংশন
 async function submitReview() {
-    const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-    if (!currentUser) {
-        showPopup('error', 'রিভিউ দিতে লগইন করুন');
-        return;
-    }
-
     const rating = document.getElementById('rating').value;
-    const reviewText = document.getElementById('reviewText').value.trim();
+    const reviewText = document.getElementById('reviewText').value;
     
     if (!rating || !reviewText) {
-        showPopup('error', 'অনুগ্রহ করে রেটিং এবং রিভিউ টেক্সট পূরণ করুন');
+        showNotification('error', 'অনুগ্রহ করে রেটিং এবং রিভিউ লিখুন');
         return;
     }
 
     try {
-        // রিভিউ অবজেক্ট তৈরি করুন
-        const review = {
-            id: 'rev_' + Date.now(),
-            userId: currentUser.id,
-            name: currentUser.name,
-            email: currentUser.email,
-            rating: parseInt(rating),
-            text: reviewText,
-            date: new Date().toISOString(),
-            courseId: 'practical-ibarot'
-        };
+        // Get current user info
+        const user = JSON.parse(localStorage.getItem('currentUser'));
+        if (!user) {
+            showNotification('error', 'রিভিউ দিতে লগইন করুন');
+            return;
+        }
 
-        // লোকাল স্টোরেজে সংরক্ষণ করুন
-        let reviews = JSON.parse(localStorage.getItem('courseReviews')) || [];
-        reviews.push(review);
-        localStorage.setItem('courseReviews', JSON.stringify(reviews));
+        const response = await fetch('https://tttt-tbz0.onrender.com/api/reviews', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                courseId: 'practical-ibarot',
+                reviewerName: user.name,
+                reviewerEmail: user.email,
+                rating: rating,
+                reviewText: reviewText
+            })
+        });
 
-        // UI আপডেট করুন
-        addReviewToUI(review);
+        const result = await response.json();
         
-        // ফর্ম রিসেট করুন
-        document.getElementById('rating').value = '';
+        if (!response.ok) {
+            throw new Error(result.message || 'রিভিউ জমা দিতে সমস্যা হয়েছে');
+        }
+
+        showNotification('success', 'আপনার রিভিউ জমা দেওয়া হয়েছে! অনুমোদনের পর প্রকাশিত হবে।');
         document.getElementById('reviewText').value = '';
-        
-        showPopup('success', 'আপনার রিভিউ সফলভাবে জমা হয়েছে!');
+        document.getElementById('rating').value = '';
         
     } catch (error) {
-        console.error('রিভিউ জমা দিতে সমস্যা:', error);
-        showPopup('error', 'রিভিউ জমা দিতে সমস্যা হয়েছে: ' + error.message);
+        console.error('Error submitting review:', error);
+        showNotification('error', error.message || 'রিভিউ জমা দিতে সমস্যা হয়েছে');
     }
 }
-
 // UI-তে রিভিউ যোগ করুন
 
 // UI-তে রিভিউ যোগ করুন
@@ -6057,17 +6044,27 @@ function activateCourse() {
 
 // নোটিফিকেশন ফাংশন
 function showNotification(type, message) {
-    const notification = document.createElement('div');
-    notification.className = `notification ${type}`;
-    notification.textContent = message;
-    document.body.appendChild(notification);
+    const popup = document.createElement('div');
+    popup.className = `custom-popup`;
     
+    popup.innerHTML = `
+        <div class="popup-content popup-${type}">
+            <div class="popup-icon">
+                ${type === 'success' ? '✓' : '⚠️'}
+            </div>
+            <div class="popup-message">${message}</div>
+            <button class="popup-close" onclick="this.parentElement.parentElement.remove()">×</button>
+        </div>
+    `;
+    
+    document.body.appendChild(popup);
+    
+    // Auto remove after 5 seconds
     setTimeout(() => {
-        notification.classList.add('fade-out');
-        setTimeout(() => notification.remove(), 500);
-    }, 3000);
+        popup.classList.add('hide');
+        setTimeout(() => popup.remove(), 300);
+    }, 5000);
 }
-
 // পেজ লোড হলে চেক করুন
 document.addEventListener('DOMContentLoaded', function() {
     // লগইন স্ট্যাটাস চেক করুন
@@ -7341,7 +7338,61 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-</script>
+
+async function loadReviews() {
+    try {
+        const response = await fetch('https://tttt-tbz0.onrender.com/api/reviews/practical-ibarot');
+        const result = await response.json();
+        
+        if (response.ok && result.reviews && result.reviews.length > 0) {
+            const reviewsContainer = document.querySelector('.reviews-container');
+            reviewsContainer.innerHTML = ''; // Clear existing reviews
+            
+            result.reviews.forEach(review => {
+                const reviewElement = document.createElement('div');
+                reviewElement.className = 'review';
+                reviewElement.innerHTML = `
+                    <div class="review-header">
+                        <div class="reviewer-avatar">${review.reviewerName.charAt(0)}</div>
+                        <div>
+                            <div class="reviewer-name">${review.reviewerName}</div>
+                            <div class="star-rating">${'⭐'.repeat(review.rating)}</div>
+                        </div>
+                        <div class="review-date">${new Date(review.date).toLocaleDateString()}</div>
+                    </div>
+                    <div class="review-text">${review.reviewText}</div>
+                `;
+                reviewsContainer.appendChild(reviewElement);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading reviews:', error);
+    }
+}
+
+// Load reviews when page loads
+document.addEventListener('DOMContentLoaded', loadReviews);
+
+
+
+function checkReviewFormVisibility() {
+    const user = JSON.parse(localStorage.getItem('currentUser'));
+    const reviewForm = document.getElementById('reviewForm');
+    
+    if (user) {
+        reviewForm.classList.remove('hidden');
+        document.getElementById('reviewerName').textContent = user.name;
+        document.getElementById('reviewerEmail').textContent = user.email;
+        document.getElementById('reviewerAvatar').textContent = user.name.charAt(0).toUpperCase();
+        document.getElementById('reviewDate').textContent = new Date().toLocaleDateString();
+    } else {
+        reviewForm.classList.add('hidden');
+    }
+}
+
+// Call this function when page loads and after login
+document.addEventListener('DOMContentLoaded', checkReviewFormVisibility);
+</script> 
 
 
 </body>
