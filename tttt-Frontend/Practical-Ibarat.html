@@ -6695,11 +6695,8 @@ window.addEventListener('DOMContentLoaded', function() {
 // Listen for course access updates
 // ক্লায়েন্ট সাইড (Practical-Ibarat.html)
 if (typeof io !== 'undefined') {
-   // And make sure the connection is established with the correct URL
-const socket = io('https://tttt-tbz0.onrender.com', {
-    transports: ['websocket', 'polling'],
-    withCredentials: true
-});
+    const socket = io('https://tttt-tbz0.onrender.com');
+
     socket.on('courseAccessUpdated', (data) => {
         const user = JSON.parse(localStorage.getItem('currentUser'));
         if (user && user.email === data.email && data.courseId === 'practical-ibarot') {
