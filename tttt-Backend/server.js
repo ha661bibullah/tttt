@@ -232,48 +232,73 @@ app.post("/api/send-otp", async (req, res) => {
   }
 })
 
-app.post("/api/verify-otp", async (req, res) => {
+// Add this new route for OTP verification in password reset flow
+app.post("/api/verify-reset-otp", async (req, res) => {
   try {
-    const { email, otp } = req.body
-
-    const user = await User.findOne({ email })
-    let storedOTP, otpExpires
-
-    if (user && user.otp) {
-      // Existing user with OTP
-      storedOTP = user.otp
-      otpExpires = user.otpExpires
-    } else if (global.tempOTPs && global.tempOTPs[email]) {
-      // New user with temporary OTP
-      storedOTP = global.tempOTPs[email].otp
-      otpExpires = global.tempOTPs[email].expires
-    } else {
-      return res.status(400).json({ success: false, message: "OTP পাওয়া যায়নি" })
+    const { email, otp } = req.body;
+    
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ success: false, message: "ব্যবহারকারী পাওয়া যায়নি" });
     }
 
-    if (storedOTP !== otp) {
-      return res.status(400).json({ success: false, message: "অবৈধ OTP" })
+    if (user.otp !== otp) {
+      return res.status(400).json({ success: false, message: "অবৈধ OTP" });
     }
 
-    if (otpExpires < Date.now()) {
-      return res.status(400).json({ success: false, message: "OTP এর মেয়াদ শেষ হয়ে গেছে" })
+    if (user.otpExpires < Date.now()) {
+      return res.status(400).json({ success: false, message: "OTP এর মেয়াদ শেষ হয়ে গেছে" });
     }
 
-    // Clear OTP after successful verification
-    if (user) {
-      user.otp = undefined
-      user.otpExpires = undefined
-      await user.save()
-    } else if (global.tempOTPs && global.tempOTPs[email]) {
-      delete global.tempOTPs[email]
-    }
+    // Generate a reset token (optional, if you want to use token-based reset)
+    const resetToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    
+    user.resetToken = resetToken;
+    user.resetTokenExpires = Date.now() + 3600000; // 1 hour
+    await user.save();
 
-    res.json({ success: true })
+    res.json({ success: true, resetToken });
   } catch (error) {
-    console.error("Error verifying OTP:", error)
-    res.status(500).json({ success: false, message: "OTP যাচাই করতে সমস্যা হয়েছে" })
+    console.error("Error verifying reset OTP:", error);
+    res.status(500).json({ success: false, message: "OTP যাচাই করতে সমস্যা হয়েছে" });
   }
-})
+});
+
+// Update the reset password endpoint
+app.post("/api/reset-password", async (req, res) => {
+  try {
+    const { email, newPassword, resetToken } = req.body;
+
+    // Find user
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ success: false, message: "ব্যবহারকারী পাওয়া যায়নি" });
+    }
+
+    // Verify reset token if using token-based reset
+    if (resetToken) {
+      if (user.resetToken !== resetToken || user.resetTokenExpires < Date.now()) {
+        return res.status(400).json({ success: false, message: "অবৈধ বা মেয়াদোত্তীর্ণ টোকেন" });
+      }
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password and clear OTP/reset fields
+    user.password = hashedPassword;
+    user.otp = undefined;
+    user.otpExpires = undefined;
+    user.resetToken = undefined;
+    user.resetTokenExpires = undefined;
+    await user.save();
+
+    res.json({ success: true, message: "পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে" });
+  } catch (error) {
+    console.error("Error resetting password:", error);
+    res.status(500).json({ success: false, message: "পাসওয়ার্ড পরিবর্তনে সমস্যা হয়েছে" });
+  }
+});
 
 // পেমেন্ট রাউটস (মিডলওয়্যার যুক্ত করা হয়েছে)
 app.post("/api/payments", validatePayment, async (req, res) => {
