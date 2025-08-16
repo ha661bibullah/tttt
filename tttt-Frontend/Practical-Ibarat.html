@@ -4227,7 +4227,32 @@ window.togglePasswordVisibility = function(inputId, toggleId) {
     margin-right: 8px;
 }
 
-</style>       
+
+.course-unlocked {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            margin: 20px 0;
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .unlocked-content {
+            opacity: 1 !important;
+            pointer-events: all !important;
+            cursor: pointer !important;
+        }
+        
+        .locked-overlay {
+            display: none !important;
+        }
+</style>        
 <div class="container2">
         <header>
             <h1>প্রাকটিকাল ইবারত শিক্ষা</h1>
@@ -6869,41 +6894,9 @@ function setupCourseAccessListener() {
     });
 }
 
-</script>     
 
 
-    <style>
-        /* ... existing styles ... */
-        
-        .course-unlocked {
-            background: linear-gradient(135deg, #4CAF50, #45a049);
-            color: white;
-            padding: 15px;
-            border-radius: 8px;
-            text-align: center;
-            margin: 20px 0;
-            animation: fadeIn 0.5s ease-in;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .unlocked-content {
-            opacity: 1 !important;
-            pointer-events: all !important;
-            cursor: pointer !important;
-        }
-        
-        .locked-overlay {
-            display: none !important;
-        }
-    </style>
-    <!-- ... existing HTML content ... -->
-    
-    <script>
-        let socket;
+let socket;
         let currentUser = null;
         let courseUnlocked = false;
 
@@ -7204,8 +7197,10 @@ function setupCourseAccessListener() {
             document.getElementById('lockedModal').style.display = 'block';
         }
 
-        // ... existing code for other functions ...
-    </script>
+</script>      
+
+
+
 
 
 </body>
