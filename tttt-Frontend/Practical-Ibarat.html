@@ -2551,7 +2551,9 @@ async function resetPassword(email, newPassword) {
         }
 
         showNotification('পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!', 'success');
-        openPasswordResetSuccessModal();
+        setTimeout(() => {
+            toggleForm('login');
+        }, 2000);
         return true;
     } catch (error) {
         console.error('Password reset error:', error);
@@ -2786,27 +2788,31 @@ async function resetPassword(email, newPassword) {
                 
                 showLoading();
                 try {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    const response = await fetch('https://tttt-tbz0.onrender.com/api/forgot-password', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ email })
+                    });
+
+                    const result = await response.json();
                     
-                    const userExists = localUsers.some(u => u.email === email);
-                    
-                    if (!userExists) {
-                        showError('forgotEmailError', 'এই ইমেইলটি রেজিস্টার্ড নয়');
+                    if (!response.ok) {
+                        showError('forgotEmailError', result.message || 'এই ইমেইলটি রেজিস্টার্ড নয়');
                         return;
                     }
-                    
-                    const otp = generateOTP();
-                    const otpSent = await sendOTP(email, otp);
-                    
-                    if (otpSent) {
+
+                    if (result.success) {
                         resetPasswordEmail = email;
                         document.getElementById('userEmail').textContent = email;
                         toggleForm('otpVerification');
                         startOTPTimer();
+                        showNotification('OTP আপনার ইমেইলে পাঠানো হয়েছে', 'success');
                     }
                 } catch (error) {
                     console.error('Error in forgot password:', error);
-                    showNotification('পাসওয়ার্ড রিসেট করতে সমস্যা হয়েছে', 'error');
+                    showError('forgotEmailError', 'পাসওয়ার্ড রিসেট করতে সমস্যা হয়েছে');
                 } finally {
                     hideLoading();
                 }
@@ -3109,6 +3115,8 @@ window.togglePasswordVisibility = function(inputId, toggleId) {
     }
 };
 </script>
+
+
 
 
 
