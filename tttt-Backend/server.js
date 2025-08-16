@@ -68,6 +68,19 @@ const Course = mongoose.model(
   }),
 )
 
+const Review = mongoose.model(
+  "Review",
+  new mongoose.Schema({
+    courseId: { type: String, required: true },
+    reviewerName: { type: String, required: true },
+    reviewerEmail: { type: String, required: true },
+    rating: { type: Number, required: true, min: 1, max: 5 },
+    reviewText: { type: String, required: true },
+    date: { type: Date, default: Date.now },
+    isApproved: { type: Boolean, default: true }, // Admin approval required
+  }),
+)
+
 // মিডলওয়্যার
 app.use(cors())
 app.use(express.json())
@@ -88,6 +101,77 @@ const validatePayment = (req, res, next) => {
 }
 
 // ======= নতুন রাউট =======
+
+// Password reset routes
+app.post("/api/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body
+
+    // Check if user exists
+    const user = await User.findOne({ email })
+    if (!user) {
+      return res.status(404).json({ success: false, message: "এই ইমেইলটি রেজিস্টার্ড নয়" })
+    }
+
+    // Generate OTP
+    const otp = Math.floor(1000 + Math.random() * 9000).toString()
+
+    // Send OTP email
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    })
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "তালিমুল ইসলাম একাডেমি - পাসওয়ার্ড রিসেট OTP",
+      text: `আপনার পাসওয়ার্ড রিসেট OTP কোড: ${otp}`,
+    }
+
+    await transporter.sendMail(mailOptions)
+
+    // Save OTP to user
+    user.otp = otp
+    user.otpExpires = Date.now() + 300000 // 5 minutes
+    await user.save()
+
+    res.json({ success: true, message: "OTP সফলভাবে পাঠানো হয়েছে" })
+  } catch (error) {
+    console.error("Error in forgot password:", error)
+    res.status(500).json({ success: false, message: "পাসওয়ার্ড রিসেট করতে সমস্যা হয়েছে" })
+  }
+})
+
+app.post("/api/reset-password", async (req, res) => {
+  try {
+    const { email, newPassword } = req.body
+
+    // Find user
+    const user = await User.findOne({ email })
+    if (!user) {
+      return res.status(404).json({ success: false, message: "ব্যবহারকারী পাওয়া যায়নি" })
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10)
+
+    // Update password
+    user.password = hashedPassword
+    user.otp = undefined
+    user.otpExpires = undefined
+    await user.save()
+
+    res.json({ success: true, message: "পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে" })
+  } catch (error) {
+    console.error("Error resetting password:", error)
+    res.status(500).json({ success: false, message: "পাসওয়ার্ড পরিবর্তনে সমস্যা হয়েছে" })
+  }
+})
+
 app.get("/api/users/:email/courses", async (req, res) => {
   try {
     const user = await User.findOne({ email: req.params.email })
@@ -329,6 +413,148 @@ app.put("/api/admin/payments/:id", async (req, res) => {
   }
 })
 
+// Get reviews for a specific course
+app.get("/api/reviews/:courseId", async (req, res) => {
+  try {
+    const { courseId } = req.params
+    const reviews = await Review.find({
+      courseId,
+      isApproved: true,
+    }).sort({ date: -1 })
+
+    res.setHeader("Content-Type", "application/json")
+    res.json({ success: true, reviews })
+  } catch (error) {
+    console.error("Error fetching reviews:", error)
+    res.setHeader("Content-Type", "application/json")
+    res.status(500).json({ success: false, message: "রিভিউ লোড করতে সমস্যা হয়েছে", error: error.message })
+  }
+})
+
+// Submit a new review
+app.post("/api/reviews", async (req, res) => {
+  try {
+    const { courseId, reviewerName, reviewerEmail, rating, reviewText } = req.body
+
+    if (!courseId || !reviewerName || !reviewerEmail || !rating || !reviewText) {
+      return res.status(400).json({
+        success: false,
+        message: "সমস্ত প্রয়োজনীয় ফিল্ড পূরণ করুন",
+        missingFields: {
+          courseId: !courseId,
+          reviewerName: !reviewerName,
+          reviewerEmail: !reviewerEmail,
+          rating: !rating,
+          reviewText: !reviewText,
+        },
+      })
+    }
+
+    if (rating < 1 || rating > 5) {
+      return res.status(400).json({
+        success: false,
+        message: "রেটিং ১ থেকে ৫ এর মধ্যে হতে হবে",
+      })
+    }
+
+    // Check if user has already reviewed this course
+    const existingReview = await Review.findOne({
+      courseId,
+      reviewerEmail,
+    })
+
+    if (existingReview) {
+      return res.status(400).json({
+        success: false,
+        message: "আপনি ইতিমধ্যে এই কোর্সের রিভিউ দিয়েছেন",
+      })
+    }
+
+    // Create new review
+    const review = new Review({
+      courseId,
+      reviewerName,
+      reviewerEmail,
+      rating: Number.parseInt(rating),
+      reviewText,
+    })
+
+    await review.save()
+
+    res.setHeader("Content-Type", "application/json")
+    res.status(201).json({
+      success: true,
+      message: "রিভিউ সফলভাবে জমা দেওয়া হয়েছে। অনুমোদনের পর প্রকাশিত হবে।",
+      review: {
+        id: review._id,
+        courseId: review.courseId,
+        reviewerName: review.reviewerName,
+        rating: review.rating,
+        reviewText: review.reviewText,
+        date: review.date,
+      },
+    })
+  } catch (error) {
+    console.error("Error submitting review:", error)
+    res.setHeader("Content-Type", "application/json")
+    res.status(500).json({
+      success: false,
+      message: "রিভিউ জমা দিতে সমস্যা হয়েছে",
+      error: error.message,
+    })
+  }
+})
+
+// Admin: Get all reviews (pending and approved)
+app.get("/api/admin/reviews", async (req, res) => {
+  try {
+    const { status, page = 1, limit = 10 } = req.query
+
+    const query = {}
+    if (status === "pending") query.isApproved = false
+    if (status === "approved") query.isApproved = true
+
+    const reviews = await Review.find(query)
+      .sort({ date: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+
+    const count = await Review.countDocuments(query)
+
+    res.json({
+      success: true,
+      reviews,
+      totalPages: Math.ceil(count / limit),
+      currentPage: page,
+    })
+  } catch (error) {
+    console.error("Error fetching admin reviews:", error)
+    res.status(500).json({ success: false, message: "রিভিউ লোড করতে সমস্যা হয়েছে" })
+  }
+})
+
+// Admin: Approve/reject review
+app.put("/api/admin/reviews/:id", async (req, res) => {
+  try {
+    const { isApproved } = req.body
+
+    const review = await Review.findByIdAndUpdate(req.params.id, { isApproved }, { new: true })
+
+    if (!review) {
+      return res.status(404).json({ success: false, message: "রিভিউ পাওয়া যায়নি" })
+    }
+
+    res.json({
+      success: true,
+      message: `রিভিউ ${isApproved ? "অনুমোদিত" : "প্রত্যাখ্যাত"} হয়েছে`,
+      review,
+    })
+  } catch (error) {
+    console.error("Error updating review:", error)
+    res.status(500).json({ success: false, message: "রিভিউ আপডেট করতে সমস্যা হয়েছে" })
+  }
+})
+
 // server.js-তে নোটিফিকেশন ইভেন্ট যোগ করুন
 io.on("connection", (socket) => {
   console.log("A user connected")
@@ -483,6 +709,25 @@ async function sendCourseAccessEmail(email, name, courseName) {
 //     console.log("A user disconnected")
 //   })
 // })
+
+app.use("*", (req, res) => {
+  res.setHeader("Content-Type", "application/json")
+  res.status(404).json({
+    success: false,
+    message: "API endpoint পাওয়া যায়নি",
+    path: req.originalUrl,
+  })
+})
+
+app.use((error, req, res, next) => {
+  console.error("Global error handler:", error)
+  res.setHeader("Content-Type", "application/json")
+  res.status(500).json({
+    success: false,
+    message: "সার্ভার এরর হয়েছে",
+    error: process.env.NODE_ENV === "development" ? error.message : "Internal server error",
+  })
+})
 
 // সার্ভার শুরু করুন
 const PORT = process.env.PORT || 5000
