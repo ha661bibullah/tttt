@@ -18,6 +18,9 @@
 
 
 
+
+
+
 <!--* Header Section -->
 <style>
 
@@ -1345,7 +1348,78 @@
             padding: 10px 12px;
         }
     }
-</style>
+
+
+    .user-menu {
+            position: fixed;
+            top: 60px;
+            right: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            min-width: 200px;
+        }
+        
+        .user-menu-content {
+            padding: 15px;
+        }
+        
+        .user-menu-content p {
+            margin: 0 0 10px 0;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .logout-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+        
+        .logout-btn:hover {
+            background: #c0392b;
+        }
+        
+        .success-notification {
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        .loading-content {
+            text-align: center;
+            color: white;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+</style> 
 <!-- Header Section -->
 <section class="header">
     <!-- Top Bar - Mobile Only -->
@@ -7125,10 +7199,11 @@ function setupCourseAccessListener() {
         }
 
         // ... existing code for other functions ...
-        
-    </script> 
+    </script>
+    <script src="public/auth.js"></script>
 
 
 
 </body>
 </html>
+
