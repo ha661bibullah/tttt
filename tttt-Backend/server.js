@@ -68,6 +68,20 @@ const Course = mongoose.model(
   }),
 )
 
+const Review = mongoose.model(
+  "Review",
+  new mongoose.Schema({
+    userId: { type: String, required: true },
+    userName: { type: String, required: true },
+    userEmail: { type: String, required: true },
+    courseId: { type: String, required: true },
+    rating: { type: Number, required: true, min: 1, max: 5 },
+    text: { type: String, required: true },
+    date: { type: Date, default: Date.now },
+    approved: { type: Boolean, default: true },
+  }),
+)
+
 // মিডলওয়্যার
 app.use(cors())
 app.use(express.json())
@@ -493,6 +507,164 @@ app.post("/api/login", async (req, res) => {
   } catch (error) {
     console.error("Login error:", error)
     res.status(500).json({ message: "Login failed" })
+  }
+})
+
+// Get all reviews for a course
+app.get("/api/reviews/:courseId", async (req, res) => {
+  try {
+    const { courseId } = req.params
+    const reviews = await Review.find({ courseId, approved: true }).sort({ date: -1 }).limit(50)
+
+    res.json({ success: true, reviews })
+  } catch (error) {
+    console.error("Error fetching reviews:", error)
+    res.status(500).json({ success: false, message: "রিভিউ লোড করতে সমস্যা হয়েছে" })
+  }
+})
+
+// Submit a new review
+app.post("/api/reviews", async (req, res) => {
+  try {
+    const { userId, userName, userEmail, courseId, rating, text } = req.body
+
+    // Validation
+    if (!userId || !userName || !userEmail || !courseId || !rating || !text) {
+      return res.status(400).json({
+        success: false,
+        message: "সমস্ত প্রয়োজনীয় ফিল্ড পূরণ করুন",
+      })
+    }
+
+    if (rating < 1 || rating > 5) {
+      return res.status(400).json({
+        success: false,
+        message: "রেটিং ১ থেকে ৫ এর মধ্যে হতে হবে",
+      })
+    }
+
+    // Check if user already reviewed this course
+    const existingReview = await Review.findOne({ userId, courseId })
+    if (existingReview) {
+      return res.status(400).json({
+        success: false,
+        message: "আপনি ইতিমধ্যে এই কোর্সের রিভিউ দিয়েছেন",
+      })
+    }
+
+    // Create new review
+    const review = new Review({
+      userId,
+      userName,
+      userEmail,
+      courseId,
+      rating: Number.parseInt(rating),
+      text: text.trim(),
+    })
+
+    await review.save()
+
+    res.status(201).json({
+      success: true,
+      message: "রিভিউ সফলভাবে জমা হয়েছে",
+      review: {
+        id: review._id,
+        userName: review.userName,
+        rating: review.rating,
+        text: review.text,
+        date: review.date,
+      },
+    })
+  } catch (error) {
+    console.error("Error submitting review:", error)
+    res.status(500).json({
+      success: false,
+      message: "রিভিউ জমা দিতে সমস্যা হয়েছে",
+    })
+  }
+})
+
+// Update a review (only by the author)
+app.put("/api/reviews/:reviewId", async (req, res) => {
+  try {
+    const { reviewId } = req.params
+    const { userId, rating, text } = req.body
+
+    const review = await Review.findById(reviewId)
+    if (!review) {
+      return res.status(404).json({
+        success: false,
+        message: "রিভিউ পাওয়া যায়নি",
+      })
+    }
+
+    // Check if user is the author
+    if (review.userId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: "আপনি শুধুমাত্র নিজের রিভিউ সম্পাদনা করতে পারেন",
+      })
+    }
+
+    // Update review
+    review.rating = Number.parseInt(rating)
+    review.text = text.trim()
+    await review.save()
+
+    res.json({
+      success: true,
+      message: "রিভিউ সফলভাবে আপডেট হয়েছে",
+      review: {
+        id: review._id,
+        userName: review.userName,
+        rating: review.rating,
+        text: review.text,
+        date: review.date,
+      },
+    })
+  } catch (error) {
+    console.error("Error updating review:", error)
+    res.status(500).json({
+      success: false,
+      message: "রিভিউ আপডেট করতে সমস্যা হয়েছে",
+    })
+  }
+})
+
+// Delete a review (only by the author)
+app.delete("/api/reviews/:reviewId", async (req, res) => {
+  try {
+    const { reviewId } = req.params
+    const { userId } = req.body
+
+    const review = await Review.findById(reviewId)
+    if (!review) {
+      return res.status(404).json({
+        success: false,
+        message: "রিভিউ পাওয়া যায়নি",
+      })
+    }
+
+    // Check if user is the author
+    if (review.userId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: "আপনি শুধুমাত্র নিজের রিভিউ ডিলিট করতে পারেন",
+      })
+    }
+
+    await Review.findByIdAndDelete(reviewId)
+
+    res.json({
+      success: true,
+      message: "রিভিউ সফলভাবে ডিলিট হয়েছে",
+    })
+  } catch (error) {
+    console.error("Error deleting review:", error)
+    res.status(500).json({
+      success: false,
+      message: "রিভিউ ডিলিট করতে সমস্যা হয়েছে",
+    })
   }
 })
 
