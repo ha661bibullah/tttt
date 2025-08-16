@@ -77,7 +77,7 @@ const Review = mongoose.model(
     rating: { type: Number, required: true, min: 1, max: 5 },
     reviewText: { type: String, required: true },
     date: { type: Date, default: Date.now },
-    isApproved: { type: Boolean, default: true }, // Admin approval required
+    isApproved: { type: Boolean, default: false }, // Admin approval required
   }),
 )
 
