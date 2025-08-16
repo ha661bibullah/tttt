@@ -2395,14 +2395,6 @@ async function registerUser(name, email, password) {
         const result = await response.json();
         
         if (!response.ok) {
-            // Handle specific error messages
-            if (result.message === "ইউজার ইতিমধ্যে বিদ্যমান") {
-                // User exists - redirect to login instead of showing error
-                showNotification('এই ইমেইলটি ইতিমধ্যে রেজিস্টার্ড। লগইন করুন।', 'info');
-                toggleForm('login');
-                document.getElementById('loginEmail').value = email;
-                return false;
-            }
             throw new Error(result.message || 'রেজিস্ট্রেশনে সমস্যা হয়েছে');
         }
 
@@ -2420,8 +2412,8 @@ async function registerUser(name, email, password) {
     } finally {
         hideLoading();
     }
-}       
-// লগইন ইউজার
+}
+        // লগইন ইউজার
         // Login function update
 async function loginUser(email, password) {
     showLoading();
@@ -7133,31 +7125,7 @@ function setupCourseAccessListener() {
         }
 
         // ... existing code for other functions ...
-
-
-        function checkCourseAccess() {
-    const user = JSON.parse(localStorage.getItem('currentUser'));
-    if (!user) return;
-    
-    // Check if user has access to this course
-    const courseId = 'practical-ibarot'; // Set this course ID
-    const hasAccess = user.courses && user.courses.includes(courseId);
-    
-    if (hasAccess) {
-        // Update UI for course access
-        document.getElementById('pricing-section').innerHTML = `
-            <div class="active-course-badge">
-                <i class="fas fa-check-circle"></i>
-                আপনি এই কোর্সটি ইতিমধ্যে কিনেছেন
-            </div>
-            <a href="#video" class="active-course-btn" onclick="openTab('video')">
-                <i class="fas fa-play"></i>
-                কোর্স শুরু করুন
-            </a>
-        `;
-    }
-}
-    </script> 
+    </script>
 
 
 
