@@ -5482,56 +5482,6 @@ function showNotification(type, message) {
     }, 3000);
 }
 
-// Submit review to backend
-// রিভিউ সাবমিট ফাংশন
-// রিভিউ সাবমিট ফাংশন
-async function submitReview() {
-    const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-    if (!currentUser) {
-        showPopup('error', 'রিভিউ দিতে লগইন করুন');
-        return;
-    }
-
-    const rating = document.getElementById('rating').value;
-    const reviewText = document.getElementById('reviewText').value.trim();
-    
-    if (!rating || !reviewText) {
-        showPopup('error', 'অনুগ্রহ করে রেটিং এবং রিভিউ টেক্সট পূরণ করুন');
-        return;
-    }
-
-    try {
-        // রিভিউ অবজেক্ট তৈরি করুন
-        const review = {
-            id: 'rev_' + Date.now(),
-            userId: currentUser.id,
-            name: currentUser.name,
-            email: currentUser.email,
-            rating: parseInt(rating),
-            text: reviewText,
-            date: new Date().toISOString(),
-            courseId: 'practical-ibarot'
-        };
-
-        // লোকাল স্টোরেজে সংরক্ষণ করুন
-        let reviews = JSON.parse(localStorage.getItem('courseReviews')) || [];
-        reviews.push(review);
-        localStorage.setItem('courseReviews', JSON.stringify(reviews));
-
-        // UI আপডেট করুন
-        addReviewToUI(review);
-        
-        // ফর্ম রিসেট করুন
-        document.getElementById('rating').value = '';
-        document.getElementById('reviewText').value = '';
-        
-        showPopup('success', 'আপনার রিভিউ সফলভাবে জমা হয়েছে!');
-        
-    } catch (error) {
-        console.error('রিভিউ জমা দিতে সমস্যা:', error);
-        showPopup('error', 'রিভিউ জমা দিতে সমস্যা হয়েছে: ' + error.message);
-    }
-}
 
 // UI-তে রিভিউ যোগ করুন
 
