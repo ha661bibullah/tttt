@@ -88,63 +88,6 @@ const validatePayment = (req, res, next) => {
 }
 
 // ======= নতুন রাউট =======
-
-// Token verification route
-app.get("/api/verify-token", async (req, res) => {
-  try {
-    const token = req.headers.authorization?.replace("Bearer ", "")
-
-    if (!token) {
-      return res.status(401).json({ message: "No token provided" })
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET)
-    const user = await User.findById(decoded.userId).select("-password")
-
-    if (!user) {
-      return res.status(401).json({ message: "User not found" })
-    }
-
-    res.json({
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      courses: user.courses,
-    })
-  } catch (error) {
-    console.error("Token verification error:", error)
-    res.status(401).json({ message: "Invalid token" })
-  }
-})
-
-// Middleware to check user course access
-app.get("/api/user/course-access/:courseId", async (req, res) => {
-  try {
-    const token = req.headers.authorization?.replace("Bearer ", "")
-
-    if (!token) {
-      return res.status(401).json({ message: "Authentication required" })
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET)
-    const user = await User.findById(decoded.userId)
-
-    if (!user) {
-      return res.status(401).json({ message: "User not found" })
-    }
-
-    const hasAccess = user.courses.includes(req.params.courseId)
-
-    res.json({
-      hasAccess,
-      userCourses: user.courses,
-    })
-  } catch (error) {
-    console.error("Course access check error:", error)
-    res.status(500).json({ message: "Error checking course access" })
-  }
-})
-
 app.get("/api/users/:email/courses", async (req, res) => {
   try {
     const user = await User.findOne({ email: req.params.email })
