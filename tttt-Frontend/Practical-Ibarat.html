@@ -2395,6 +2395,14 @@ async function registerUser(name, email, password) {
         const result = await response.json();
         
         if (!response.ok) {
+            // Handle specific error messages
+            if (result.message === "ইউজার ইতিমধ্যে বিদ্যমান") {
+                // User exists - redirect to login instead of showing error
+                showNotification('এই ইমেইলটি ইতিমধ্যে রেজিস্টার্ড। লগইন করুন।', 'info');
+                toggleForm('login');
+                document.getElementById('loginEmail').value = email;
+                return false;
+            }
             throw new Error(result.message || 'রেজিস্ট্রেশনে সমস্যা হয়েছে');
         }
 
@@ -2412,8 +2420,8 @@ async function registerUser(name, email, password) {
     } finally {
         hideLoading();
     }
-}
-        // লগইন ইউজার
+}       
+// লগইন ইউজার
         // Login function update
 async function loginUser(email, password) {
     showLoading();
@@ -6687,8 +6695,11 @@ window.addEventListener('DOMContentLoaded', function() {
 // Listen for course access updates
 // ক্লায়েন্ট সাইড (Practical-Ibarat.html)
 if (typeof io !== 'undefined') {
-    const socket = io('https://tttt-tbz0.onrender.com');
-
+   // And make sure the connection is established with the correct URL
+const socket = io('https://tttt-tbz0.onrender.com', {
+    transports: ['websocket', 'polling'],
+    withCredentials: true
+});
     socket.on('courseAccessUpdated', (data) => {
         const user = JSON.parse(localStorage.getItem('currentUser'));
         if (user && user.email === data.email && data.courseId === 'practical-ibarot') {
