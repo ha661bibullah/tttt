@@ -20,7 +20,6 @@
 
 
 
-
 <!--* Header Section -->
 <style>
 
@@ -3119,6 +3118,7 @@ window.togglePasswordVisibility = function(inputId, toggleId) {
 };
 
 </script> 
+
 
 
 
@@ -7438,58 +7438,6 @@ function checkReviewFormVisibility() {
 // Call this function when page loads and after login
 document.addEventListener('DOMContentLoaded', checkReviewFormVisibility);
 
-
-
-
-// OTP ভেরিফিকেশন ফর্ম সাবমিট
-document.getElementById('otpForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    
-    const otp = document.getElementById('otpInput').value.trim();
-    
-    if (otp.length !== 4) {
-        showError('otpError', 'OTP অবশ্যই ৪ সংখ্যার হতে হবে');
-        return;
-    } else {
-        hideError('otpError');
-    }
-    
-    showLoading();
-    try {
-        const response = await fetch('https://tttt-tbz0.onrender.com/api/verify-otp', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                email: currentEmail || resetPasswordEmail, // Added resetPasswordEmail fallback
-                otp: otp
-            })
-        });
-
-        const result = await response.json();
-        
-        if (!response.ok) {
-            showError('otpError', result.message || 'OTP যাচাই করতে সমস্যা হয়েছে');
-            return;
-        }
-
-        if (result.success) {
-            if (resetPasswordEmail) {
-                toggleForm('resetPassword');
-            } else {
-                // Registration flow
-                toggleForm('setPassword');
-            }
-            showNotification('OTP সফলভাবে যাচাই করা হয়েছে', 'success');
-        }
-    } catch (error) {
-        console.error('Error in OTP verification:', error);
-        showError('otpError', 'OTP যাচাই করতে সমস্যা হয়েছে');
-    } finally {
-        hideLoading();
-    }
-});
 
 </script>  
 

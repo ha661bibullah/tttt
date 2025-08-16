@@ -146,9 +146,38 @@ app.post("/api/forgot-password", async (req, res) => {
   }
 })
 
+app.post("/api/verify-reset-otp", async (req, res) => {
+  try {
+    const { email, otp } = req.body
+
+    const user = await User.findOne({ email })
+    if (!user) {
+      return res.status(404).json({ success: false, message: "ব্যবহারকারী পাওয়া যায়নি" })
+    }
+
+    if (!user.otp) {
+      return res.status(400).json({ success: false, message: "OTP পাওয়া যায়নি। আবার চেষ্টা করুন" })
+    }
+
+    if (user.otp !== otp) {
+      return res.status(400).json({ success: false, message: "অবৈধ OTP" })
+    }
+
+    if (user.otpExpires < Date.now()) {
+      return res.status(400).json({ success: false, message: "OTP এর মেয়াদ শেষ হয়ে গেছে" })
+    }
+
+    // Don't clear OTP here - keep it for password reset
+    res.json({ success: true, message: "OTP সফলভাবে যাচাই করা হয়েছে" })
+  } catch (error) {
+    console.error("Error verifying reset OTP:", error)
+    res.status(500).json({ success: false, message: "OTP যাচাই করতে সমস্যা হয়েছে" })
+  }
+})
+
 app.post("/api/reset-password", async (req, res) => {
   try {
-    const { email, newPassword } = req.body
+    const { email, newPassword, otp } = req.body
 
     // Find user
     const user = await User.findOne({ email })
@@ -156,10 +185,15 @@ app.post("/api/reset-password", async (req, res) => {
       return res.status(404).json({ success: false, message: "ব্যবহারকারী পাওয়া যায়নি" })
     }
 
+    // Verify OTP one more time for security
+    if (!user.otp || user.otp !== otp || user.otpExpires < Date.now()) {
+      return res.status(400).json({ success: false, message: "OTP যাচাই করা হয়নি বা মেয়াদ শেষ" })
+    }
+
     // Hash new password
     const hashedPassword = await bcrypt.hash(newPassword, 10)
 
-    // Update password
+    // Update password and clear OTP
     user.password = hashedPassword
     user.otp = undefined
     user.otpExpires = undefined
