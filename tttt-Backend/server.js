@@ -27,10 +27,10 @@ mongoose
 const User = mongoose.model(
   "User",
   new mongoose.Schema({
-    name: { type: String, required: true },
-    email: { type: String, unique: true, index: true, required: true }, // unique + index
-    password: { type: String, required: true },
-    courses: { type: [String], default: [] },
+    name: String,
+    email: { type: String, unique: true },
+    password: String,
+    courses: [String],
     otp: String,
     otpExpires: Date,
     resetToken: String,
@@ -39,7 +39,6 @@ const User = mongoose.model(
     createdAt: { type: Date, default: Date.now },
   })
 );
-
 
 const Payment = mongoose.model(
   "Payment",
@@ -122,36 +121,28 @@ app.post("/api/register", async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    // ✅ Validate input
+    // Validate input
     if (!name || !email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "নাম, ইমেইল এবং পাসওয়ার্ড প্রয়োজন",
-        errorType: "validation_error",
-        missingFields: {
-          name: !name,
-          email: !email,
-          password: !password,
-        }
+      return res.status(400).json({ 
+        success: false, 
+        message: "নাম, ইমেইল এবং পাসওয়ার্ড প্রয়োজন" 
       });
     }
 
-    // ✅ Check if user exists
+    // Check if user exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: "ইউজার ইতিমধ্যে বিদ্যমান",
-        errorType: "user_exists",
-        existingEmail: email
+      return res.status(400).json({ 
+        success: false, 
+        message: "ইউজার ইতিমধ্যে বিদ্যমান" 
       });
     }
 
-    // ✅ Hash password
+    // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // ✅ Create new user
+    // Create new user
     const user = new User({
       name,
       email,
@@ -161,24 +152,16 @@ app.post("/api/register", async (req, res) => {
 
     await user.save();
 
-    // ✅ Generate tokens
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: "1d" }
-    );
+    // Generate tokens
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1d" });
+    const refreshToken = jwt.sign({ userId: user._id }, process.env.JWT_REFRESH_SECRET, { 
+      expiresIn: "7d" 
+    });
 
-    const refreshToken = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_REFRESH_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    // ✅ Save refresh token to user
+    // Save refresh token to user
     user.refreshToken = refreshToken;
     await user.save();
 
-    // ✅ Success response
     res.status(201).json({
       success: true,
       message: "রেজিস্ট্রেশন সফল হয়েছে",
@@ -191,18 +174,15 @@ app.post("/api/register", async (req, res) => {
         courses: user.courses,
       },
     });
-
   } catch (error) {
     console.error("Registration error:", error);
-    res.status(500).json({
-      success: false,
+    res.status(500).json({ 
+      success: false, 
       message: "রেজিস্ট্রেশন ব্যর্থ হয়েছে",
-      error: error.message,
-      errorType: "server_error"
+      error: error.message 
     });
   }
 });
-
 
 // User Login
 app.post("/api/login", async (req, res) => {
