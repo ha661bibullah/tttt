@@ -129,7 +129,22 @@ app.post("/api/forgot-password", async (req, res) => {
       from: process.env.EMAIL_USER,
       to: email,
       subject: "তালিমুল ইসলাম একাডেমি - পাসওয়ার্ড রিসেট OTP",
-      text: `আপনার পাসওয়ার্ড রিসেট OTP কোড: ${otp}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #4caf50; text-align: center;">পাসওয়ার্ড রিসেট OTP</h2>
+          <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; text-align: center;">
+            <p style="font-size: 16px; margin-bottom: 20px;">আপনার পাসওয়ার্ড রিসেট করার জন্য নিচের OTP কোডটি ব্যবহার করুন:</p>
+            <div style="background: #fff; padding: 15px; border-radius: 5px; font-size: 24px; font-weight: bold; color: #333; letter-spacing: 5px; margin: 20px 0;">
+              ${otp}
+            </div>
+            <p style="color: #666; font-size: 14px;">এই OTP কোডটি ৫ মিনিটের জন্য বৈধ।</p>
+          </div>
+          <p style="margin-top: 20px; color: #666; text-align: center;">
+            ধন্যবাদ,<br>
+            তালিমুল ইসলাম একাডেমি টিম
+          </p>
+        </div>
+      `,
     }
 
     await transporter.sendMail(mailOptions)
@@ -139,6 +154,8 @@ app.post("/api/forgot-password", async (req, res) => {
     user.otpExpires = Date.now() + 300000 // 5 minutes
     await user.save()
 
+    console.log(`Password reset OTP sent to ${email}: ${otp}`) // Added logging for debugging
+
     res.json({ success: true, message: "OTP সফলভাবে পাঠানো হয়েছে" })
   } catch (error) {
     console.error("Error in forgot password:", error)
@@ -146,63 +163,125 @@ app.post("/api/forgot-password", async (req, res) => {
   }
 })
 
+// পাসওয়ার্ড রিসেটের জন্য OTP যাচাইকরণ
 app.post("/api/verify-reset-otp", async (req, res) => {
   try {
     const { email, otp } = req.body
 
+    console.log(`Verifying reset OTP for ${email}: ${otp}`) // Added logging
+
+    // ডাটাবেজে ইউজার খুঁজুন
     const user = await User.findOne({ email })
     if (!user) {
-      return res.status(404).json({ success: false, message: "ব্যবহারকারী পাওয়া যায়নি" })
+      return res.status(404).json({
+        success: false,
+        message: "ব্যবহারকারী পাওয়া যায়নি",
+      })
     }
 
-    if (!user.otp) {
-      return res.status(400).json({ success: false, message: "OTP পাওয়া যায়নি। আবার চেষ্টা করুন" })
+    // OTP এবং এর মেয়াদকাল চেক করুন
+    if (!user.otp || user.otp !== otp || user.otpExpires < Date.now()) {
+      console.log(
+        `OTP verification failed for ${email}. User OTP: ${user.otp}, Provided: ${otp}, Expires: ${user.otpExpires}, Now: ${Date.now()}`,
+      ) // Added detailed logging
+      return res.status(400).json({
+        success: false,
+        message: "অবৈধ OTP অথবা OTP এর মেয়াদ শেষ",
+      })
     }
 
-    if (user.otp !== otp) {
-      return res.status(400).json({ success: false, message: "অবৈধ OTP" })
-    }
+    console.log(`OTP verified successfully for ${email}`) // Added success logging
 
-    if (user.otpExpires < Date.now()) {
-      return res.status(400).json({ success: false, message: "OTP এর মেয়াদ শেষ হয়ে গেছে" })
-    }
-
-    // Don't clear OTP here - keep it for password reset
-    res.json({ success: true, message: "OTP সফলভাবে যাচাই করা হয়েছে" })
+    // OTP সঠিক হলে সফল রেসপন্স দিন (OTP এখনও ডিলিট করবেন না)
+    res.json({
+      success: true,
+      message: "OTP সঠিকভাবে যাচাই হয়েছে",
+    })
   } catch (error) {
-    console.error("Error verifying reset OTP:", error)
-    res.status(500).json({ success: false, message: "OTP যাচাই করতে সমস্যা হয়েছে" })
+    console.error("OTP যাচাই করতে সমস্যা:", error)
+    res.status(500).json({
+      success: false,
+      message: "OTP যাচাই করতে সমস্যা হয়েছে",
+    })
   }
 })
 
+// নতুন পাসওয়ার্ড সেট করার রাউট
 app.post("/api/reset-password", async (req, res) => {
   try {
-    const { email, newPassword, otp } = req.body
+    const { email, otp, newPassword } = req.body
 
-    // Find user
+    console.log(`Resetting password for ${email} with OTP: ${otp}`) // Added logging
+
+    // ভ্যালিডেশন
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "সমস্ত প্রয়োজনীয় ফিল্ড পূরণ করুন",
+      })
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে",
+      })
+    }
+
+    // ডাটাবেজে ইউজার খুঁজুন
     const user = await User.findOne({ email })
     if (!user) {
-      return res.status(404).json({ success: false, message: "ব্যবহারকারী পাওয়া যায়নি" })
+      return res.status(404).json({
+        success: false,
+        message: "ব্যবহারকারী পাওয়া যায়নি",
+      })
     }
 
-    // Verify OTP one more time for security
+    // OTP আবার চেক করুন (সিকিউরিটির জন্য)
     if (!user.otp || user.otp !== otp || user.otpExpires < Date.now()) {
-      return res.status(400).json({ success: false, message: "OTP যাচাই করা হয়নি বা মেয়াদ শেষ" })
+      console.log(`Password reset failed - OTP mismatch for ${email}`) // Added logging
+      return res.status(400).json({
+        success: false,
+        message: "অবৈধ OTP অথবা OTP এর মেয়াদ শেষ",
+      })
     }
 
-    // Hash new password
-    const hashedPassword = await bcrypt.hash(newPassword, 10)
+    // নতুন পাসওয়ার্ড হ্যাশ করুন
+    const saltRounds = 10
+    const hashedPassword = await bcrypt.hash(newPassword, saltRounds)
 
-    // Update password and clear OTP
-    user.password = hashedPassword
-    user.otp = undefined
-    user.otpExpires = undefined
-    await user.save()
+    console.log(`Updating password for ${email} in MongoDB`) // Added logging
 
-    res.json({ success: true, message: "পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে" })
+    // ইউজারের পাসওয়ার্ড আপডেট করুন এবং OTP ফিল্ডস ক্লিয়ার করুন
+    const updateResult = await User.findOneAndUpdate(
+      { email: email },
+      {
+        $set: { password: hashedPassword },
+        $unset: { otp: "", otpExpires: "" },
+      },
+      { new: true },
+    )
+
+    if (!updateResult) {
+      console.error(`Failed to update password for ${email}`) // Added error logging
+      return res.status(500).json({
+        success: false,
+        message: "পাসওয়ার্ড আপডেট করতে সমস্যা হয়েছে",
+      })
+    }
+
+    console.log(`Password successfully updated for ${email} in MongoDB`) // Added success logging
+
+    res.json({
+      success: true,
+      message: "পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে। এখন নতুন পাসওয়ার্ড দিয়ে লগইন করুন।",
+    })
   } catch (error) {
-    console.error("Error resetting password:", error)
-    res.status(500).json({ success: false, message: "পাসওয়ার্ড পরিবর্তনে সমস্যা হয়েছে" })
+    console.error("পাসওয়ার্ড রিসেট করতে সমস্যা:", error)
+    res.status(500).json({
+      success: false,
+      message: "পাসওয়ার্ড রিসেট করতে সমস্যা হয়েছে",
+    })
   }
 })
 
@@ -266,46 +345,60 @@ app.post("/api/send-otp", async (req, res) => {
   }
 })
 
+// In your backend (server.js), modify the verify-otp endpoint:
+
 app.post("/api/verify-otp", async (req, res) => {
   try {
     const { email, otp } = req.body
 
+    // First check in temporary storage for new users
+    if (global.tempOTPs && global.tempOTPs[email]) {
+      const tempOTP = global.tempOTPs[email]
+      if (tempOTP.otp === otp && tempOTP.expires > Date.now()) {
+        delete global.tempOTPs[email]
+        return res.json({ success: true })
+      }
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP or expired",
+      })
+    }
+
+    // Then check in database for existing users
     const user = await User.findOne({ email })
-    let storedOTP, otpExpires
-
-    if (user && user.otp) {
-      // Existing user with OTP
-      storedOTP = user.otp
-      otpExpires = user.otpExpires
-    } else if (global.tempOTPs && global.tempOTPs[email]) {
-      // New user with temporary OTP
-      storedOTP = global.tempOTPs[email].otp
-      otpExpires = global.tempOTPs[email].expires
-    } else {
-      return res.status(400).json({ success: false, message: "OTP পাওয়া যায়নি" })
+    if (!user || !user.otp) {
+      return res.status(400).json({
+        success: false,
+        message: "OTP not found or expired",
+      })
     }
 
-    if (storedOTP !== otp) {
-      return res.status(400).json({ success: false, message: "অবৈধ OTP" })
+    if (user.otp !== otp) {
+      return res.status(400).json({
+        success: false,
+        message: "OTP doesn't match",
+      })
     }
 
-    if (otpExpires < Date.now()) {
-      return res.status(400).json({ success: false, message: "OTP এর মেয়াদ শেষ হয়ে গেছে" })
+    if (user.otpExpires < Date.now()) {
+      return res.status(400).json({
+        success: false,
+        message: "OTP expired",
+      })
     }
 
     // Clear OTP after successful verification
-    if (user) {
-      user.otp = undefined
-      user.otpExpires = undefined
-      await user.save()
-    } else if (global.tempOTPs && global.tempOTPs[email]) {
-      delete global.tempOTPs[email]
-    }
+    user.otp = undefined
+    user.otpExpires = undefined
+    await user.save()
 
     res.json({ success: true })
   } catch (error) {
     console.error("Error verifying OTP:", error)
-    res.status(500).json({ success: false, message: "OTP যাচাই করতে সমস্যা হয়েছে" })
+    res.status(500).json({
+      success: false,
+      message: "Error verifying OTP",
+    })
   }
 })
 
