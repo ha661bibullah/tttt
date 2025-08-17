@@ -1481,8 +1481,8 @@
             </li>
             <li class="nav-item">
                 <a href="#" class="nav-link">
-                    <i class="fas fa-calendar-alt"></i>
-                    <span>ইভেন্ট</span>
+                    <i class="fas fa-book-reader"></i>
+                    <span>উপদেষ্টা</span>
                 </a>
             </li>
             <li class="nav-item">
@@ -1617,8 +1617,8 @@
                 শিক্ষক
             </a>
             <a href="#" class="nav-link">
-                <i class="fas fa-calendar-alt"></i>
-                ইভেন্ট
+                <i class="fas fa-book-reader"></i>
+                উপদেষ্টা
             </a>
             <a href="#" class="nav-link">
                 <i class="fas fa-blog"></i>
@@ -7197,10 +7197,8 @@ let socket;
             document.getElementById('lockedModal').style.display = 'block';
         }
 
-</script>      
 
-<script>
-
+        
 const apiHelper = {
     baseURL: 'https://tttt-tbz0.onrender.com/api',
     
@@ -7504,7 +7502,25 @@ function checkReviewFormVisibility() {
 
 // Call this function when page loads and after login
 document.addEventListener('DOMContentLoaded', checkReviewFormVisibility);
-</script> 
+
+
+function openVideoModal(videoId) {
+    console.log("Opening video modal for:", videoId); // ডিবাগিং লগ
+    const modal = document.getElementById('videoModal');
+    const videoTitle = document.getElementById('videoTitle');
+    const videoContent = document.querySelector('.modal-video source');
+    
+    videoTitle.textContent = `ভিডিও: ${videoId}`;
+    videoContent.src = `path/to/videos/${videoId}.mp4`; // ভিডিও পাথ সঠিক কিনা চেক করুন
+    modal.style.display = 'flex';
+    
+    // ভিডিও রিলোড ফোর্স করুন
+    const videoPlayer = document.querySelector('.modal-video');
+    videoPlayer.load();
+}
+</script>         
+
+
 
 
 </body>
