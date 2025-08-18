@@ -856,6 +856,27 @@ app.use((error, req, res, next) => {
   })
 })
 
+
+// Add this to your server.js
+app.post("/api/verify-course-access", async (req, res) => {
+    try {
+        const { email, courseId } = req.body;
+        
+        // Check if user exists and has access to the course
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.json({ hasAccess: false });
+        }
+        
+        // Check if user has this course in their courses array
+        const hasAccess = user.courses.includes(courseId);
+        
+        res.json({ hasAccess });
+    } catch (error) {
+        console.error("Error verifying course access:", error);
+        res.status(500).json({ message: "Error verifying access" });
+    }
+});
 // সার্ভার শুরু করুন
 const PORT = process.env.PORT || 5000
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`))
