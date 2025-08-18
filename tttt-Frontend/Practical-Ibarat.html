@@ -4945,6 +4945,65 @@ function toggleContent() {
 }
 
 // Video modal functionality
+function openVideoModal(videoId) {
+    const videos = {
+        'lesson-1': {
+            title: 'ইবারত শিক্ষার গুরুত্ব ও প্রয়োজনীয়তা',
+            url: 'https://res.cloudinary.com/ddtfpqimk/video/upload/v1753088101/video_esq7dv.mp4'
+        },
+        'lesson-2': {
+            title: 'আরবি বর্ণমালা ও উচ্চারণ',
+            url: 'https://res.cloudinary.com/ddtfpqimk/video/upload/v1753088101/video_esq7dv.mp4'
+        },
+        'lesson-3': {
+            title: 'নাহু (ব্যাকরণ) এর মৌলিক ধারণা',
+            url: 'https://res.cloudinary.com/ddtfpqimk/video/upload/v1753088101/video_esq7dv.mp4'
+        },
+        'lesson-4': {
+            title: 'সরফ (শব্দতত্ত্ব) এর মৌলিক ধারণা',
+            url: 'https://res.cloudinary.com/ddtfpqimk/video/upload/v1753088101/video_esq7dv.mp4'
+        },
+        'lesson-5': {
+            title: 'বাক্য গঠন ও বিশ্লেষণ',
+            url: 'https://res.cloudinary.com/ddtfpqimk/video/upload/v1753088101/video_esq7dv.mp4'
+        },
+        'lesson-6': {
+            title: 'ইবারত পড়ার কৌশল',
+            url: 'https://res.cloudinary.com/ddtfpqimk/video/upload/v1753088101/video_esq7dv.mp4'
+        },
+        'lesson-7': {
+            title: 'ইবারত অনুবাদের নিয়মকানুন',
+            url: 'https://res.cloudinary.com/ddtfpqimk/video/upload/v1753088101/video_esq7dv.mp4'
+        },
+        'lesson-8': {
+            title: 'কুরআনের ইবারত বিশ্লেষণ',
+            url: 'https://res.cloudinary.com/ddtfpqimk/video/upload/v1753088101/video_esq7dv.mp4'
+        },
+        'lesson-9': {
+            title: 'হাদিসের ইবারত বিশ্লেষণ',
+            url: 'https://res.cloudinary.com/ddtfpqimk/video/upload/v1753088101/video_esq7dv.mp4'
+        },
+        'lesson-10': {
+            title: 'ইবারত শিক্ষার প্রায়োগিক কৌশল',
+            url: 'https://res.cloudinary.com/ddtfpqimk/video/upload/v1753088101/video_esq7dv.mp4'
+        }
+    };
+
+    if (videos[videoId]) {
+        const video = videos[videoId];
+        document.getElementById('videoTitle').textContent = video.title;
+        document.getElementById('videoContent').innerHTML = `
+            <video class="modal-video" controls controlsList="nodownload">
+                <source src="${video.url}" type="video/mp4">
+                আপনার ব্রাউজার ভিডিও সাপোর্ট করে না।
+            </video>
+        `;
+        document.getElementById('videoModal').style.display = 'block';
+        
+        // Setup protection for the new video element
+        setupVideoProtection();
+    }
+}
 
 // Rest of your existing code remains the same...
 // Note modal functionality
@@ -7049,7 +7108,7 @@ let socket;
             const videos = {
                 'lesson-1': {
                     title: 'ইবারত শিক্ষার গুরুত্ব ও প্রয়োজনীয়তা',
-                    url: 'https://res.cloudinary.com/ddtfpqimk/video/upload/v1753088101/video_esq7dv.mp4'
+                    url: 'https://dl.dropboxusercontent.com/scl/fi/0e7qeu58o4ht107ao9svi/3.mp4?rlkey=qfh76dfx9qh0eh0zi4akbzgbr'
                 },
                 // ... other videos
             };
@@ -7444,71 +7503,8 @@ function checkReviewFormVisibility() {
 // Call this function when page loads and after login
 document.addEventListener('DOMContentLoaded', checkReviewFormVisibility);
 
+</script>       
 
-
-function openVideoModal(videoId) {
-    const videos = {
-        'lesson-1': {
-            title: 'ইবারত শিক্ষার গুরুত্ব ও প্রয়োজনীয়তা',
-            url: 'https://res.cloudinary.com/ddtfpqimk/video/upload/v1753088101/video_esq7dv.mp4'
-        },
-        'lesson-2': {
-            title: 'আরবি বর্ণমালা ও উচ্চারণ',
-            url: 'https://res.cloudinary.com/ddtfpqimk/video/upload/v1753088101/video_esq7dv.mp4'
-        },
-        'lesson-3': {
-            title: 'নাহু (ব্যাকরণ) এর মৌলিক ধারণা',
-            url: 'https://res.cloudinary.com/ddtfpqimk/video/upload/v1753088101/video_esq7dv.mp4'
-        },
-        'lesson-4': {
-            title: 'সরফ (শব্দতত্ত্ব) এর মৌলিক ধারণা',
-            url: 'https://res.cloudinary.com/ddtfpqimk/video/upload/v1753088101/video_esq7dv.mp4'
-        },
-        'lesson-5': {
-            title: 'বাক্য গঠন ও বিশ্লেষণ',
-            url: 'https://res.cloudinary.com/ddtfpqimk/video/upload/v1753088101/video_esq7dv.mp4'
-        },
-        'lesson-6': {
-            title: 'ইবারত পড়ার কৌশল',
-            url: 'https://res.cloudinary.com/ddtfpqimk/video/upload/v1753088101/video_esq7dv.mp4'
-        },
-        'lesson-7': {
-            title: 'ইবারত অনুবাদের নিয়মকানুন',
-            url: 'https://res.cloudinary.com/ddtfpqimk/video/upload/v1753088101/video_esq7dv.mp4'
-        },
-        'lesson-8': {
-            title: 'কুরআনের ইবারত বিশ্লেষণ',
-            url: 'https://res.cloudinary.com/ddtfpqimk/video/upload/v1753088101/video_esq7dv.mp4'
-        },
-        'lesson-9': {
-            title: 'হাদিসের ইবারত বিশ্লেষণ',
-            url: 'https://res.cloudinary.com/ddtfpqimk/video/upload/v1753088101/video_esq7dv.mp4'
-        },
-        'lesson-10': {
-            title: 'ইবারত শিক্ষার প্রায়োগিক কৌশল',
-            url: 'https://res.cloudinary.com/ddtfpqimk/video/upload/v1753088101/video_esq7dv.mp4'
-        }
-    };
-
-    if (videos[videoId]) {
-        const video = videos[videoId];
-        document.getElementById('videoTitle').textContent = video.title;
-        document.getElementById('videoContent').innerHTML = `
-            <video class="modal-video" controls controlsList="nodownload">
-                <source src="${video.url}" type="video/mp4">
-                আপনার ব্রাউজার ভিডিও সাপোর্ট করে না।
-            </video>
-        `;
-        document.getElementById('videoModal').style.display = 'block';
-        
-        // Setup protection for the new video element
-        setupVideoProtection();
-    }
-}
-
-
-</script>          
-  
 
 
 
