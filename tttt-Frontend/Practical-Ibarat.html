@@ -7452,9 +7452,8 @@ document.addEventListener('DOMContentLoaded', checkReviewFormVisibility);
 
 
 
-
-async function openVideoModal(videoId) {
-   const videos = {
+function openVideoModal(videoId) {
+    const videos = {
         'lesson-1': {
             title: 'ইবারত শিক্ষার গুরুত্ব ও প্রয়োজনীয়তা',
             youtubeId: 'U3OgemyAKaM'
@@ -7475,10 +7474,12 @@ async function openVideoModal(videoId) {
         const video = videos[videoId];
         document.getElementById('videoTitle').textContent = video.title;
         
-        const hasAccess = await checkCourseAccess('practical-ibarot');
+        // Check if user is logged in and has access
+        const token = localStorage.getItem('authToken');
+        const user = JSON.parse(localStorage.getItem('currentUser'));
         
-        if (hasAccess) {
-            // User has access - show YouTube iframe
+        if (token && user) {
+            // User is logged in - show YouTube iframe with private video
             document.getElementById('videoContent').innerHTML = `
                 <iframe class="modal-video" 
                         src="https://www.youtube.com/embed/${video.youtubeId}?enablejsapi=1" 
@@ -7487,11 +7488,11 @@ async function openVideoModal(videoId) {
                         allowfullscreen></iframe>
             `;
         } else {
-            // No access - show message
+            // User not logged in - show message
             document.getElementById('videoContent').innerHTML = `
                 <div class="locked-message">
-                    <p>এই ভিডিওটি দেখতে আপনাকে কোর্সটি ক্রয় করতে হবে।</p>
-                    <button onclick="showPaymentModal()" class="buy-btn">কোর্স কিনুন</button>
+                    <p>এই ভিডিওটি দেখতে আপনাকে লগইন করতে হবে এবং কোর্সটি ক্রয় করতে হবে।</p>
+                    <button onclick="LoginModule.handleLogin()" class="buy-btn">লগইন করুন</button>
                 </div>
             `;
         }
@@ -7499,6 +7500,8 @@ async function openVideoModal(videoId) {
         document.getElementById('videoModal').style.display = 'block';
     }
 }
+
+
 </script>          
   
      
